@@ -41,13 +41,19 @@
   .correction-item:last-child { border-bottom: 0; }
   .correction-text { line-height: 1.5; }
   .correction-actions button { margin: 0; padding: 8px 10px; font-size: .92rem; }
-  .compact-controls { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 8px; }
+  .compact-controls { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 8px; }
+  .compact-controls .control-row { display: flex; flex-wrap: wrap; gap: 6px; }
   .compact-controls button { width: auto; margin: 0; padding: 8px 10px; border-radius: 10px; font-size: .9rem; line-height: 1.15; }
+  .compact-controls .main-controls button { min-width: 48px; flex: 0 0 auto; font-size: 1rem; }
+  .compact-controls .nav-controls button { flex: 1 1 140px; }
   @media (max-width: 560px) {
     .row { grid-template-columns: 1fr; }
     button { width: 100%; margin-right: 0; }
     .compact-controls { gap: 6px; }
-    .compact-controls button { width: auto; flex: 1 1 auto; padding: 8px 9px; font-size: .86rem; }
+    .compact-controls .control-row { gap: 6px; }
+    .compact-controls button { width: auto; padding: 8px 9px; font-size: .86rem; }
+    .compact-controls .main-controls button { flex: 1 1 0; min-width: 44px; }
+    .compact-controls .nav-controls button { flex: 1 1 135px; }
   }
 </style>
 </head>
@@ -84,7 +90,7 @@
       <label><input id="skipLearned" type="checkbox" checked> 覚えた問題は読み上げない</label>
     </div>
 
-    <p class="muted">iPhone/Androidでは、最初に必ず「再生」をタップしてください。端末によってはマナーモード中でも音量ボタンで音量調整が必要です。</p>
+    <p class="muted">iPhone/Androidでは、最初に必ず「▶」をタップしてください。端末によってはマナーモード中でも音量ボタンで音量調整が必要です。</p>
   </section>
 
   <section class="card">
@@ -93,11 +99,15 @@
     <div class="big"><strong>問題：</strong><span id="q">---</span></div>
     <div class="big"><strong>答え：</strong><span id="a">---</span></div>
     <div class="compact-controls" aria-label="再生操作">
-      <button id="play">再生</button>
-      <button class="secondary" id="stop">停止</button>
-      <button class="light" id="restart">最初から</button>
-      <button class="light" id="prev">← 前の問題</button>
-      <button class="light" id="next">次の問題 →</button>
+      <div class="control-row main-controls">
+        <button id="play" aria-label="再生" title="再生">▶</button>
+        <button class="secondary" id="stop" aria-label="停止" title="停止">❚❚</button>
+        <button class="light" id="restart" aria-label="最初から" title="最初から">⬅</button>
+      </div>
+      <div class="control-row nav-controls">
+        <button class="light" id="prev">← 前の問題</button>
+        <button class="light" id="next">次の問題 →</button>
+      </div>
     </div>
     <label style="margin-top:12px"><input id="learnedCurrent" type="checkbox" disabled> この問題を覚えた（次から読まない）</label>
     <div id="learnedInfo" class="muted">覚えた問題：0問</div>
@@ -162,9 +172,9 @@
     <ol>
       <li>科目を選ぶ。</li>
       <li>答えまでの秒数と読み上げ速度を決める。</li>
-      <li>「再生」を押すと、今表示されている問題から始まります。</li>
-      <li>「停止」を押すと、今の問題で止まります。</li>
-      <li>「最初から」を押すと、選んだ科目の最初から流れます。</li>
+      <li>「▶」を押すと、今表示されている問題から始まります。</li>
+      <li>「❚❚」を押すと、今の問題で止まります。</li>
+      <li>「⬅」を押すと、選んだ科目の最初から流れます。</li>
       <li>覚えた問題はチェックすると、次回から読み上げ対象から外れます。</li>
       <li>読み間違いは「読み間違い修正」に登録すると、音声だけ指定した読み方に変わります。</li>
       <li>読み方設定は書き出して、別のiPhoneやPCに取り込めます。</li>
