@@ -15,7 +15,7 @@
   textarea { min-height: 130px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.5; }
   input[type="range"] { width: 100%; }
   .inline-value { font-weight: 700; }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   button { appearance: none; border: 0; border-radius: 12px; padding: 12px 14px; margin: 4px 4px 4px 0; font-size: 1rem; font-weight: 700; background: #111; color: white; }
   button.secondary { background: #555; }
   button.light { background: #e9e9e9; color: #111; }
@@ -60,7 +60,11 @@
       </div>
       <div>
         <label for="delay">問題のあと答えまでの秒数</label>
-        <input id="delay" type="number" value="0.1" min="0" max="15" step="0.1">
+        <input id="delay" type="number" value="0.2" min="0" max="15" step="0.1">
+      </div>
+      <div>
+        <label for="betweenDelay">問題間の秒数</label>
+        <input id="betweenDelay" type="number" value="0" min="0" max="15" step="0.1">
       </div>
     </div>
 
@@ -172,6 +176,7 @@ const SUBJECT_ORDER = [...new Set(DATA.map(item => item.subject))];
 const synth = window.speechSynthesis;
 const subjectEl = document.getElementById("subject");
 const delayEl = document.getElementById("delay");
+const betweenDelayEl = document.getElementById("betweenDelay");
 const rateEl = document.getElementById("rate");
 const rateValueEl = document.getElementById("rateValue");
 const qEl = document.getElementById("q");
@@ -682,6 +687,19 @@ function getDelaySeconds() {
   return Math.min(15, Math.max(0, value));
 }
 
+function getBetweenDelaySeconds() {
+  const value = parseFloat(betweenDelayEl?.value || "0");
+  if (Number.isNaN(value)) return 0;
+  return Math.min(15, Math.max(0, value));
+}
+
+function waitSeconds(seconds) {
+  const ms = Math.max(0, seconds) * 1000;
+  return new Promise(resolve => {
+    timer = setTimeout(resolve, ms);
+  });
+}
+
 rateEl.addEventListener("input", updateRateValue);
 updateRateValue();
 
@@ -767,7 +785,7 @@ function setProgress(extra="") {
   const learnedMark = isLearned(item) ? " 覚えた済み" : "";
   progressEl.innerHTML = `<span class="pill">${item.subject}</span> ${idx + 1} / ${queue.length} ${extra}${learnedMark}`;
   qEl.textContent = item.question;
-  aEl.textContent = currentPhase === "answer" ? item.answer : "（考える時間）";
+  aEl.textContent = (currentPhase === "answer" || currentPhase === "between") ? item.answer : "（考える時間）";
   updateLearnedInfo();
 }
 
@@ -782,10 +800,7 @@ async function playCurrent(token = playToken) {
 
   currentPhase = "thinking";
   setProgress("答えまで待機中");
-  const delayMs = getDelaySeconds() * 1000;
-  await new Promise(resolve => {
-    timer = setTimeout(resolve, delayMs);
-  });
+  await waitSeconds(getDelaySeconds());
   timer = null;
   if (stopped || token !== playToken) return;
 
@@ -794,6 +809,15 @@ async function playCurrent(token = playToken) {
   aEl.textContent = item.answer;
   await speak(item.answer);
   if (stopped || token !== playToken) return;
+
+  const betweenDelay = getBetweenDelaySeconds();
+  if (betweenDelay > 0) {
+    currentPhase = "between";
+    setProgress("次の問題まで待機中");
+    await waitSeconds(betweenDelay);
+    timer = null;
+    if (stopped || token !== playToken) return;
+  }
 
   const nextIdx = nextPlayableIndex(idx + 1, 1);
   if (nextIdx === -1) {
