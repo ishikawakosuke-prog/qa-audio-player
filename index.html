@@ -67,9 +67,9 @@
     <label for="voice">声</label>
     <select id="voice"><option>読み込み中...</option></select>
 
-    <label for="rate">読み上げ速度：<span id="rateValue" class="inline-value">0.75倍</span></label>
-    <input id="rate" type="range" value="0.75" min="0.6" max="2.0" step="0.05">
-    <div class="muted">1.00倍が以前の2.00倍相当です。左にするとゆっくり、右にすると速くなります。</div>
+    <label for="rate">読み上げ速度：<span id="rateValue" class="inline-value">1.00倍</span></label>
+    <input id="rate" type="range" value="1.00" min="0.5" max="2.0" step="0.05">
+    <div class="muted">1.00倍が直前版の0.60倍相当です。左にするとゆっくり、右にすると速くなります。</div>
 
     <div style="margin-top:14px">
       <label><input id="shuffle" type="checkbox"> シャッフルする</label>
@@ -211,7 +211,7 @@ let timer = null;
 let currentPhase = "";
 let playToken = 0;
 
-const RATE_BASE_MULTIPLIER = 2.0; // 画面上の0.75倍が、直前バージョンのデフォルト速度の約0.75倍になる
+const RATE_BASE_MULTIPLIER = 1.2; // 画面上の1.00倍が、直前バージョンの0.60倍相当になる
 const LEARNED_STORAGE_KEY = "qaAudioPlayerLearnedV1";
 const PRONUNCIATION_STORAGE_KEY = "qaAudioPlayerPronunciationV1";
 
@@ -668,7 +668,7 @@ function updateQuestionList() {
 function getDisplayedRate() {
   const value = parseFloat(rateEl.value || "1.00");
   if (Number.isNaN(value)) return 1.00;
-  return Math.min(2.0, Math.max(0.6, value));
+  return Math.min(2.0, Math.max(0.5, value));
 }
 
 function getSpeechRate() {
