@@ -11,7 +11,7 @@
   h1 { font-size: 1.45rem; margin: 0 0 8px; }
   .card { background: white; border: 1px solid #ddd; border-radius: 14px; padding: 16px; margin: 12px 0; box-shadow: 0 1px 4px rgba(0,0,0,.04); }
   label { display: block; margin: 12px 0 4px; font-weight: 650; }
-  select, input[type="number"], input[type="search"] { width: 100%; font-size: 1rem; padding: 10px; border-radius: 10px; border: 1px solid #ccc; background: white; box-sizing: border-box; }
+  select, input[type="number"], input[type="search"], input[type="text"] { width: 100%; font-size: 1rem; padding: 10px; border-radius: 10px; border: 1px solid #ccc; background: white; box-sizing: border-box; }
   input[type="range"] { width: 100%; }
   .inline-value { font-weight: 700; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -35,6 +35,11 @@
   .question-toggle { display: inline-flex; gap: 6px; align-items: center; margin: 0; font-weight: 650; }
   .question-body { margin-top: 8px; line-height: 1.55; }
   .question-answer { margin-top: 4px; color: #444; }
+  .correction-list { border: 1px solid #ddd; border-radius: 12px; margin-top: 10px; background: #fff; }
+  .correction-item { padding: 10px 12px; border-bottom: 1px solid #eee; display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
+  .correction-item:last-child { border-bottom: 0; }
+  .correction-text { line-height: 1.5; }
+  .correction-actions button { margin: 0; padding: 8px 10px; font-size: .92rem; }
   @media (max-width: 560px) { .row { grid-template-columns: 1fr; } button { width: 100%; margin-right: 0; } }
 </style>
 </head>
@@ -112,6 +117,29 @@
     <div id="questionList" class="question-list"></div>
   </section>
 
+
+  <section class="card">
+    <strong>読み間違い修正</strong>
+    <p class="muted">表示される問題文・答えはそのままで、音声で読むときだけ登録した読み方に置き換えます。</p>
+    <div class="row">
+      <div>
+        <label for="wrongText">読み間違える文字</label>
+        <input id="wrongText" type="text" placeholder="例：Lisp">
+      </div>
+      <div>
+        <label for="readText">読ませたい音</label>
+        <input id="readText" type="text" placeholder="例：リスプ">
+      </div>
+    </div>
+    <div style="margin-top:10px">
+      <button id="addPronunciation">読み方を登録</button>
+      <button class="light" id="testPronunciation">今の問題を試し読み</button>
+      <button class="light" id="resetPronunciation">標準の読み方に戻す</button>
+    </div>
+    <div id="pronunciationSummary" class="status" style="margin-top:10px">読み込み中...</div>
+    <div id="pronunciationList" class="correction-list"></div>
+  </section>
+
   <section class="card">
     <strong>使い方</strong>
     <ol>
@@ -119,6 +147,7 @@
       <li>答えまでの秒数と読み上げ速度を決める。</li>
       <li>「開始」を押す。途中で「前の問題」「次の問題」も使えます。</li>
       <li>覚えた問題はチェックすると、次回から読み上げ対象から外れます。</li>
+      <li>読み間違いは「読み間違い修正」に登録すると、音声だけ指定した読み方に変わります。</li>
     </ol>
     <p class="muted">画面をロックするとブラウザの読み上げが止まる端末があります。その場合は画面を点けたまま使うか、台本テキストをスマホの読み上げ機能で読ませてください。</p>
   </section>
@@ -146,6 +175,13 @@ const listSubjectEl = document.getElementById("listSubject");
 const listSearchEl = document.getElementById("listSearch");
 const listSummaryEl = document.getElementById("listSummary");
 const questionListEl = document.getElementById("questionList");
+const wrongTextEl = document.getElementById("wrongText");
+const readTextEl = document.getElementById("readText");
+const pronunciationSummaryEl = document.getElementById("pronunciationSummary");
+const pronunciationListEl = document.getElementById("pronunciationList");
+const addPronunciationEl = document.getElementById("addPronunciation");
+const testPronunciationEl = document.getElementById("testPronunciation");
+const resetPronunciationEl = document.getElementById("resetPronunciation");
 
 let voices = [];
 let queue = [];
@@ -157,6 +193,182 @@ let playToken = 0;
 
 const RATE_BASE_MULTIPLIER = 2.0; // 画面上の1.00倍を、以前の2.00倍相当にする
 const LEARNED_STORAGE_KEY = "qaAudioPlayerLearnedV1";
+const PRONUNCIATION_STORAGE_KEY = "qaAudioPlayerPronunciationV1";
+
+
+const DEFAULT_PRONUNCIATION_RULES = [
+  { from: "CommonLisp", to: "コモンリスプ" },
+  { from: "Lisp", to: "リスプ" },
+  { from: "Scheme", to: "スキーム" },
+  { from: "Prolog", to: "プロログ" },
+  { from: "Deep Blue", to: "ディープブルー" },
+  { from: "DeepBlue", to: "ディープブルー" },
+  { from: "Deep Thought", to: "ディープソート" },
+  { from: "ELIZA", to: "イライザ" },
+  { from: "SHRDLU", to: "シュルドゥル" },
+  { from: "ENIAC", to: "エニアック" },
+  { from: "WWW", to: "ワールドワイドウェブ" },
+  { from: "ARPA-net", to: "アーパネット" },
+  { from: "HAL9000", to: "ハルきゅうせん" },
+  { from: "GPS", to: "ジーピーエス" },
+  { from: "GA", to: "ジーエー" },
+  { from: "ES", to: "イーエス" },
+  { from: "EP", to: "イーピー" },
+  { from: "GP", to: "ジーピー" },
+  { from: "PAC", to: "パック" },
+  { from: "SBL", to: "エスビーエル" },
+  { from: "EBL", to: "イービーエル" },
+  { from: "ITS", to: "アイティーエス" },
+  { from: "EXOR", to: "イーエックスオーアール" },
+  { from: "LVQ", to: "エルブイキュー" },
+  { from: "k-NN", to: "ケーエヌエヌ" },
+  { from: "NN", to: "エヌエヌ" },
+  { from: "DTW", to: "ディーティーダブリュー" },
+  { from: "TCP", to: "ティーシーピー" },
+  { from: "UDP", to: "ユーディーピー" },
+  { from: "IPv4", to: "アイピーブイフォー" },
+  { from: "IPv6", to: "アイピーブイシックス" },
+  { from: "IP", to: "アイピー" },
+  { from: "MAC", to: "マック" },
+  { from: "LAN", to: "ラン" },
+  { from: "WAN", to: "ワン" },
+  { from: "VLAN", to: "ブイラン" },
+  { from: "OSPF", to: "オーエスピーエフ" },
+  { from: "BGP", to: "ビージーピー" },
+  { from: "RIP", to: "リップ" },
+  { from: "IANA", to: "アイアナ" },
+  { from: "NIC", to: "ニック" },
+  { from: "APNIC", to: "エーピーニック" },
+  { from: "JPNIC", to: "ジェーピーニック" },
+  { from: "CIDR", to: "サイダー" },
+  { from: "UTP", to: "ユーティーピー" },
+  { from: "NRZI", to: "エヌアールゼットアイ" },
+  { from: "MLT-3", to: "エムエルティー スリー" },
+  { from: "4D-PAM5", to: "フォーディー パム ファイブ" },
+  { from: "100BASE-TX", to: "ひゃくベース ティーエックス" },
+  { from: "100BASE-FX", to: "ひゃくベース エフエックス" },
+  { from: "1000BASE-T", to: "せんベース ティー" },
+  { from: "1000BASE-SX", to: "せんベース エスエックス" },
+  { from: "1000BASE-LX", to: "せんベース エルエックス" }
+];
+
+function cloneDefaultPronunciationRules() {
+  return DEFAULT_PRONUNCIATION_RULES.map(rule => ({ ...rule }));
+}
+
+function normalizePronunciationRule(rule) {
+  return {
+    from: String(rule?.from || "").trim(),
+    to: String(rule?.to || "").trim()
+  };
+}
+
+function loadPronunciationRules() {
+  try {
+    const raw = localStorage.getItem(PRONUNCIATION_STORAGE_KEY);
+    if (!raw) return cloneDefaultPronunciationRules();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return cloneDefaultPronunciationRules();
+    const cleaned = parsed.map(normalizePronunciationRule).filter(rule => rule.from && rule.to);
+    return cleaned.length > 0 ? cleaned : [];
+  } catch (e) {
+    return cloneDefaultPronunciationRules();
+  }
+}
+
+let pronunciationRules = loadPronunciationRules();
+
+function savePronunciationRules() {
+  try {
+    localStorage.setItem(PRONUNCIATION_STORAGE_KEY, JSON.stringify(pronunciationRules));
+  } catch (e) {
+    // 保存できない環境では、開いている間だけ読み方を保持する
+  }
+  updatePronunciationList();
+}
+
+function applyPronunciationRules(text) {
+  let result = String(text || "");
+  const rules = pronunciationRules
+    .map(normalizePronunciationRule)
+    .filter(rule => rule.from && rule.to)
+    .sort((a, b) => b.from.length - a.from.length);
+
+  rules.forEach(rule => {
+    result = result.split(rule.from).join(rule.to);
+  });
+  return result;
+}
+
+function updatePronunciationList() {
+  if (!pronunciationListEl || !pronunciationSummaryEl) return;
+  pronunciationListEl.innerHTML = "";
+  pronunciationSummaryEl.textContent = `登録済み：${pronunciationRules.length}件`;
+
+  if (pronunciationRules.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "correction-item muted";
+    empty.textContent = "読み方の登録はありません。";
+    pronunciationListEl.appendChild(empty);
+    return;
+  }
+
+  pronunciationRules.forEach((rule, index) => {
+    const row = document.createElement("div");
+    row.className = "correction-item";
+
+    const text = document.createElement("div");
+    text.className = "correction-text";
+    text.textContent = `${rule.from} → ${rule.to}`;
+
+    const actions = document.createElement("div");
+    actions.className = "correction-actions";
+
+    const testBtn = document.createElement("button");
+    testBtn.className = "light";
+    testBtn.type = "button";
+    testBtn.textContent = "試す";
+    testBtn.addEventListener("click", () => speak(rule.from));
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "light";
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "削除";
+    deleteBtn.addEventListener("click", () => {
+      pronunciationRules.splice(index, 1);
+      savePronunciationRules();
+    });
+
+    actions.appendChild(testBtn);
+    actions.appendChild(deleteBtn);
+    row.appendChild(text);
+    row.appendChild(actions);
+    pronunciationListEl.appendChild(row);
+  });
+}
+
+function addPronunciationRule() {
+  const from = (wrongTextEl?.value || "").trim();
+  const to = (readTextEl?.value || "").trim();
+  if (!from || !to) {
+    if (pronunciationSummaryEl) pronunciationSummaryEl.textContent = "読み間違える文字と読ませたい音を両方入れてください。";
+    return;
+  }
+  const existingIndex = pronunciationRules.findIndex(rule => rule.from === from);
+  if (existingIndex >= 0) {
+    pronunciationRules[existingIndex] = { from, to };
+  } else {
+    pronunciationRules.unshift({ from, to });
+  }
+  if (wrongTextEl) wrongTextEl.value = "";
+  if (readTextEl) readTextEl.value = "";
+  savePronunciationRules();
+}
+
+function resetPronunciationRules() {
+  pronunciationRules = cloneDefaultPronunciationRules();
+  savePronunciationRules();
+}
 
 function loadLearnedIds() {
   try {
@@ -445,7 +657,7 @@ function nextPlayableIndex(start, delta) {
 function speak(text) {
   return new Promise(resolve => {
     synth.cancel();
-    const u = new SpeechSynthesisUtterance(text);
+    const u = new SpeechSynthesisUtterance(applyPronunciationRules(text));
     u.lang = "ja-JP";
     const selected = voices[parseInt(voiceEl.value, 10)];
     if (selected) u.voice = selected;
@@ -584,6 +796,30 @@ if (listSubjectEl) {
 if (listSearchEl) {
   listSearchEl.addEventListener("input", updateQuestionList);
 }
+if (addPronunciationEl) {
+  addPronunciationEl.addEventListener("click", addPronunciationRule);
+}
+if (wrongTextEl) {
+  wrongTextEl.addEventListener("keydown", event => {
+    if (event.key === "Enter") addPronunciationRule();
+  });
+}
+if (readTextEl) {
+  readTextEl.addEventListener("keydown", event => {
+    if (event.key === "Enter") addPronunciationRule();
+  });
+}
+if (testPronunciationEl) {
+  testPronunciationEl.addEventListener("click", () => {
+    const text = queue.length > 0 && queue[idx] ? queue[idx].question : "Lisp Prolog TCP IPv6";
+    speak(text);
+  });
+}
+if (resetPronunciationEl) {
+  resetPronunciationEl.addEventListener("click", resetPronunciationRules);
+}
+updatePronunciationList();
+
 updateLearnedInfo();
 updateQuestionList();
 
