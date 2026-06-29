@@ -11,7 +11,8 @@
   h1 { font-size: 1.45rem; margin: 0 0 8px; }
   .card { background: white; border: 1px solid #ddd; border-radius: 14px; padding: 16px; margin: 12px 0; box-shadow: 0 1px 4px rgba(0,0,0,.04); }
   label { display: block; margin: 12px 0 4px; font-weight: 650; }
-  select, input[type="number"], input[type="search"], input[type="text"] { width: 100%; font-size: 1rem; padding: 10px; border-radius: 10px; border: 1px solid #ccc; background: white; box-sizing: border-box; }
+  select, input[type="number"], input[type="search"], input[type="text"], textarea { width: 100%; font-size: 1rem; padding: 10px; border-radius: 10px; border: 1px solid #ccc; background: white; box-sizing: border-box; }
+  textarea { min-height: 130px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.5; }
   input[type="range"] { width: 100%; }
   .inline-value { font-weight: 700; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -66,8 +67,8 @@
     <label for="voice">声</label>
     <select id="voice"><option>読み込み中...</option></select>
 
-    <label for="rate">読み上げ速度：<span id="rateValue" class="inline-value">1.00倍</span></label>
-    <input id="rate" type="range" value="1.00" min="0.6" max="2.0" step="0.05">
+    <label for="rate">読み上げ速度：<span id="rateValue" class="inline-value">0.75倍</span></label>
+    <input id="rate" type="range" value="0.75" min="0.6" max="2.0" step="0.05">
     <div class="muted">1.00倍が以前の2.00倍相当です。左にするとゆっくり、右にすると速くなります。</div>
 
     <div style="margin-top:14px">
@@ -136,6 +137,19 @@
       <button class="light" id="testPronunciation">今の問題を試し読み</button>
       <button class="light" id="resetPronunciation">標準の読み方に戻す</button>
     </div>
+
+    <div style="margin-top:14px">
+      <strong>読み方設定のエクスポート／インポート</strong>
+      <p class="muted">別の端末に移すときは「書き出す」を押して出てきた内容をコピーし、移したい端末で貼り付けて「取り込む」を押してください。</p>
+      <textarea id="pronunciationTransferText" placeholder="ここに読み方設定のJSONが表示されます。別の端末から移す場合は、ここに貼り付けます。"></textarea>
+      <div style="margin-top:10px">
+        <button class="light" id="exportPronunciation">読み方設定を書き出す</button>
+        <button class="light" id="importPronunciation">貼り付け内容を取り込む</button>
+        <button class="light" id="mergePronunciation">追加で取り込む</button>
+      </div>
+      <div id="pronunciationTransferStatus" class="muted" style="margin-top:8px"></div>
+    </div>
+
     <div id="pronunciationSummary" class="status" style="margin-top:10px">読み込み中...</div>
     <div id="pronunciationList" class="correction-list"></div>
   </section>
@@ -148,6 +162,7 @@
       <li>「開始」を押す。途中で「前の問題」「次の問題」も使えます。</li>
       <li>覚えた問題はチェックすると、次回から読み上げ対象から外れます。</li>
       <li>読み間違いは「読み間違い修正」に登録すると、音声だけ指定した読み方に変わります。</li>
+      <li>読み方設定は書き出して、別のiPhoneやPCに取り込めます。</li>
     </ol>
     <p class="muted">画面をロックするとブラウザの読み上げが止まる端末があります。その場合は画面を点けたまま使うか、台本テキストをスマホの読み上げ機能で読ませてください。</p>
   </section>
@@ -182,6 +197,11 @@ const pronunciationListEl = document.getElementById("pronunciationList");
 const addPronunciationEl = document.getElementById("addPronunciation");
 const testPronunciationEl = document.getElementById("testPronunciation");
 const resetPronunciationEl = document.getElementById("resetPronunciation");
+const pronunciationTransferTextEl = document.getElementById("pronunciationTransferText");
+const pronunciationTransferStatusEl = document.getElementById("pronunciationTransferStatus");
+const exportPronunciationEl = document.getElementById("exportPronunciation");
+const importPronunciationEl = document.getElementById("importPronunciation");
+const mergePronunciationEl = document.getElementById("mergePronunciation");
 
 let voices = [];
 let queue = [];
@@ -191,7 +211,7 @@ let timer = null;
 let currentPhase = "";
 let playToken = 0;
 
-const RATE_BASE_MULTIPLIER = 2.0; // 画面上の1.00倍を、以前の2.00倍相当にする
+const RATE_BASE_MULTIPLIER = 2.0; // 画面上の0.75倍が、直前バージョンのデフォルト速度の約0.75倍になる
 const LEARNED_STORAGE_KEY = "qaAudioPlayerLearnedV1";
 const PRONUNCIATION_STORAGE_KEY = "qaAudioPlayerPronunciationV1";
 
@@ -368,6 +388,82 @@ function addPronunciationRule() {
 function resetPronunciationRules() {
   pronunciationRules = cloneDefaultPronunciationRules();
   savePronunciationRules();
+}
+
+function cleanedPronunciationRules(rules) {
+  const seen = new Set();
+  const result = [];
+  (Array.isArray(rules) ? rules : []).forEach(rule => {
+    const normalized = normalizePronunciationRule(rule);
+    if (!normalized.from || !normalized.to || seen.has(normalized.from)) return;
+    seen.add(normalized.from);
+    result.push(normalized);
+  });
+  return result;
+}
+
+function buildPronunciationExportPayload() {
+  return {
+    app: "qa-audio-player",
+    type: "pronunciation-rules",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    rules: cleanedPronunciationRules(pronunciationRules)
+  };
+}
+
+function setPronunciationTransferStatus(message) {
+  if (pronunciationTransferStatusEl) pronunciationTransferStatusEl.textContent = message;
+}
+
+function parsePronunciationImportText(text) {
+  const raw = String(text || "").trim();
+  if (!raw) throw new Error("読み方設定が空です。");
+  const parsed = JSON.parse(raw);
+  const rules = Array.isArray(parsed) ? parsed : parsed.rules;
+  const cleaned = cleanedPronunciationRules(rules);
+  if (cleaned.length === 0) throw new Error("取り込める読み方設定が見つかりません。");
+  return cleaned;
+}
+
+async function exportPronunciationRules() {
+  const json = JSON.stringify(buildPronunciationExportPayload(), null, 2);
+  if (pronunciationTransferTextEl) {
+    pronunciationTransferTextEl.value = json;
+    pronunciationTransferTextEl.focus();
+    pronunciationTransferTextEl.select();
+  }
+
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(json);
+      setPronunciationTransferStatus(`読み方設定を書き出してコピーしました：${pronunciationRules.length}件`);
+      return;
+    } catch (e) {
+      // クリップボードが使えない場合は、テキストエリアから手動コピーする
+    }
+  }
+  setPronunciationTransferStatus(`読み方設定を書き出しました：${pronunciationRules.length}件。上の枠内をコピーしてください。`);
+}
+
+function importPronunciationRules(merge = false) {
+  try {
+    const imported = parsePronunciationImportText(pronunciationTransferTextEl?.value || "");
+    if (merge) {
+      const map = new Map();
+      cleanedPronunciationRules(pronunciationRules).forEach(rule => map.set(rule.from, rule));
+      imported.forEach(rule => map.set(rule.from, rule));
+      pronunciationRules = [...map.values()];
+      savePronunciationRules();
+      setPronunciationTransferStatus(`読み方設定を追加で取り込みました：${imported.length}件。現在の登録：${pronunciationRules.length}件`);
+    } else {
+      pronunciationRules = imported;
+      savePronunciationRules();
+      setPronunciationTransferStatus(`読み方設定を取り込みました：${pronunciationRules.length}件`);
+    }
+  } catch (e) {
+    setPronunciationTransferStatus(`取り込みできませんでした：${e.message || "JSONの形式を確認してください。"}`);
+  }
 }
 
 function loadLearnedIds() {
@@ -817,6 +913,15 @@ if (testPronunciationEl) {
 }
 if (resetPronunciationEl) {
   resetPronunciationEl.addEventListener("click", resetPronunciationRules);
+}
+if (exportPronunciationEl) {
+  exportPronunciationEl.addEventListener("click", exportPronunciationRules);
+}
+if (importPronunciationEl) {
+  importPronunciationEl.addEventListener("click", () => importPronunciationRules(false));
+}
+if (mergePronunciationEl) {
+  mergePronunciationEl.addEventListener("click", () => importPronunciationRules(true));
 }
 updatePronunciationList();
 
