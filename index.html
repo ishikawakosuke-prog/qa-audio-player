@@ -233,6 +233,7 @@ let queueDirty = true;
 const RATE_BASE_MULTIPLIER = 1.08; // 画面上の1.00倍が、直前バージョンの0.90倍相当になる
 const LEARNED_STORAGE_KEY = "qaAudioPlayerLearnedV1";
 const PRONUNCIATION_STORAGE_KEY = "qaAudioPlayerPronunciationV1";
+const CURRENT_STATE_STORAGE_KEY = "qaAudioPlayerCurrentStateV1";
 
 
 const DEFAULT_PRONUNCIATION_RULES = [
@@ -515,6 +516,49 @@ function isLearned(item) {
   return learnedIds.has(itemId(item));
 }
 
+function loadCurrentState() {
+  try {
+    const raw = localStorage.getItem(CURRENT_STATE_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveCurrentState() {
+  if (!queue.length || !queue[idx]) return;
+  try {
+    localStorage.setItem(CURRENT_STATE_STORAGE_KEY, JSON.stringify({
+      subject: subjectEl.value,
+      itemId: itemId(queue[idx]),
+      savedAt: new Date().toISOString()
+    }));
+  } catch (e) {
+    // 保存できない環境では、開いている間だけ現在位置を保持する
+  }
+}
+
+function setSubjectIfPossible(subject) {
+  if (!subject) return;
+  const exists = [...subjectEl.options].some(option => option.value === subject);
+  if (exists) subjectEl.value = subject;
+}
+
+function restoreCurrentState() {
+  const state = loadCurrentState();
+  if (state && state.subject) setSubjectIfPossible(state.subject);
+  buildQueue(state && state.itemId ? { preserveItemId: state.itemId } : {});
+
+  if (state && state.itemId) {
+    const restoredIndex = queue.findIndex(item => itemId(item) === state.itemId);
+    if (restoredIndex >= 0) idx = restoredIndex;
+  }
+
+  stopped = true;
+  currentPhase = "question";
+  setProgress(state && state.itemId ? "前回の問題" : "停止中");
+}
+
 function subjectItems() {
   const sub = subjectEl.value;
   return DATA.filter(x => sub === "__ALL__" || x.subject === sub);
@@ -733,11 +777,19 @@ if (speechSynthesis.onvoiceschanged !== undefined) {
   speechSynthesis.onvoiceschanged = loadVoices;
 }
 
-function buildQueue() {
-  queue = subjectItems();
+function buildQueue(options = {}) {
+  const preserveItemId = options.preserveItemId || "";
+  const allItems = subjectItems();
+  queue = allItems;
+
   if (skipLearnedEl.checked) {
     queue = queue.filter(x => !isLearned(x));
+    if (preserveItemId && !queue.some(item => itemId(item) === preserveItemId)) {
+      const preservedItem = allItems.find(item => itemId(item) === preserveItemId);
+      if (preservedItem) queue = [preservedItem, ...queue];
+    }
   }
+
   if (shuffleEl.checked) {
     queue = [...queue].sort(() => Math.random() - 0.5);
   }
@@ -803,6 +855,7 @@ function setProgress(extra="") {
   progressEl.innerHTML = `<span class="pill">${item.subject}</span> ${idx + 1} / ${queue.length} ${extra}${learnedMark}`;
   qEl.textContent = item.question;
   aEl.textContent = (currentPhase === "answer" || currentPhase === "between") ? item.answer : "（考える時間）";
+  saveCurrentState();
   updateLearnedInfo();
 }
 
@@ -921,8 +974,11 @@ function jumpQuestion(delta) {
 }
 
 subjectEl.addEventListener("change", () => {
-  queueDirty = true;
-  updateLearnedInfo();
+  stopped = true;
+  cancelCurrentPlayback();
+  buildQueue();
+  currentPhase = "question";
+  setProgress("停止中");
   updateQuestionList();
 });
 
@@ -1017,7 +1073,7 @@ if (mergePronunciationEl) {
 }
 updatePronunciationList();
 
-updateLearnedInfo();
+restoreCurrentState();
 updateQuestionList();
 
 document.getElementById("play").addEventListener("click", playFromCurrent);
