@@ -21,6 +21,7 @@
   button.light { background: #e9e9e9; color: #111; }
   .status { font-size: .95rem; color: #333; line-height: 1.5; }
   .big { font-size: 1.1rem; line-height: 1.7; }
+  .qa-display { min-height: 11.2rem; }
   .muted { color: #666; font-size: .92rem; }
   .pill { display:inline-block; background:#eee; padding:4px 8px; border-radius:999px; margin: 2px; }
   .question-list { max-height: 520px; overflow: auto; border: 1px solid #ddd; border-radius: 12px; margin-top: 10px; background: #fff; }
@@ -96,8 +97,10 @@
   <section class="card">
     <div id="progress" class="status">未開始</div>
     <hr>
-    <div class="big"><strong>問題：</strong><span id="q">---</span></div>
-    <div class="big"><strong>答え：</strong><span id="a">---</span></div>
+    <div class="qa-display">
+      <div class="big"><strong>問題：</strong><span id="q">---</span></div>
+      <div class="big"><strong>答え：</strong><span id="a">---</span></div>
+    </div>
     <div class="compact-controls" aria-label="再生操作">
       <div class="control-row main-controls">
         <button id="play" aria-label="再生" title="再生">▶</button>
