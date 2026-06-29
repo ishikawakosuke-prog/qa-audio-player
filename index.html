@@ -64,9 +64,6 @@
       </div>
     </div>
 
-    <label for="voice">声</label>
-    <select id="voice"><option>読み込み中...</option></select>
-
     <label for="rate">読み上げ速度：<span id="rateValue" class="inline-value">1.00倍</span></label>
     <input id="rate" type="range" value="1.00" min="0.5" max="2.0" step="0.05">
 
@@ -173,7 +170,6 @@ const DATA = JSON.parse(document.getElementById("qa-data").textContent);
 const SUBJECT_ORDER = [...new Set(DATA.map(item => item.subject))];
 const synth = window.speechSynthesis;
 const subjectEl = document.getElementById("subject");
-const voiceEl = document.getElementById("voice");
 const delayEl = document.getElementById("delay");
 const rateEl = document.getElementById("rate");
 const rateValueEl = document.getElementById("rateValue");
@@ -689,23 +685,11 @@ updateRateValue();
 
 function loadVoices() {
   voices = synth.getVoices();
-  voiceEl.innerHTML = "";
+}
+
+function getPreferredVoice() {
   const ja = voices.filter(v => (v.lang || "").toLowerCase().startsWith("ja"));
-  const rest = voices.filter(v => !(v.lang || "").toLowerCase().startsWith("ja"));
-  const ordered = [...ja, ...rest];
-  if (ordered.length === 0) {
-    const opt = document.createElement("option");
-    opt.textContent = "標準の声";
-    opt.value = "";
-    voiceEl.appendChild(opt);
-    return;
-  }
-  ordered.forEach((v, i) => {
-    const opt = document.createElement("option");
-    opt.value = voices.indexOf(v);
-    opt.textContent = `${v.name} / ${v.lang}`;
-    voiceEl.appendChild(opt);
-  });
+  return ja[0] || voices[0] || null;
 }
 loadVoices();
 if (speechSynthesis.onvoiceschanged !== undefined) {
@@ -754,7 +738,7 @@ function speak(text) {
     synth.cancel();
     const u = new SpeechSynthesisUtterance(applyPronunciationRules(text));
     u.lang = "ja-JP";
-    const selected = voices[parseInt(voiceEl.value, 10)];
+    const selected = getPreferredVoice();
     if (selected) u.voice = selected;
     u.rate = getSpeechRate();
     u.pitch = 1.0;
