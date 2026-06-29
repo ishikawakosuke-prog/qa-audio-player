@@ -41,7 +41,14 @@
   .correction-item:last-child { border-bottom: 0; }
   .correction-text { line-height: 1.5; }
   .correction-actions button { margin: 0; padding: 8px 10px; font-size: .92rem; }
-  @media (max-width: 560px) { .row { grid-template-columns: 1fr; } button { width: 100%; margin-right: 0; } }
+  .compact-controls { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 8px; }
+  .compact-controls button { width: auto; margin: 0; padding: 8px 10px; border-radius: 10px; font-size: .9rem; line-height: 1.15; }
+  @media (max-width: 560px) {
+    .row { grid-template-columns: 1fr; }
+    button { width: 100%; margin-right: 0; }
+    .compact-controls { gap: 6px; }
+    .compact-controls button { width: auto; flex: 1 1 auto; padding: 8px 9px; font-size: .86rem; }
+  }
 </style>
 </head>
 <body>
@@ -77,16 +84,6 @@
       <label><input id="skipLearned" type="checkbox" checked> 覚えた問題は読み上げない</label>
     </div>
 
-    <div style="margin-top:14px">
-      <button id="play">再生</button>
-      <button class="secondary" id="stop">停止</button>
-      <button class="light" id="restart">最初から</button>
-    </div>
-
-    <div style="margin-top:8px">
-      <button class="light" id="prev">← 前の問題</button>
-      <button class="light" id="next">次の問題 →</button>
-    </div>
     <p class="muted">iPhone/Androidでは、最初に必ず「再生」をタップしてください。端末によってはマナーモード中でも音量ボタンで音量調整が必要です。</p>
   </section>
 
@@ -95,9 +92,15 @@
     <hr>
     <div class="big"><strong>問題：</strong><span id="q">---</span></div>
     <div class="big"><strong>答え：</strong><span id="a">---</span></div>
+    <div class="compact-controls" aria-label="再生操作">
+      <button id="play">再生</button>
+      <button class="secondary" id="stop">停止</button>
+      <button class="light" id="restart">最初から</button>
+      <button class="light" id="prev">← 前の問題</button>
+      <button class="light" id="next">次の問題 →</button>
+    </div>
     <label style="margin-top:12px"><input id="learnedCurrent" type="checkbox" disabled> この問題を覚えた（次から読まない）</label>
     <div id="learnedInfo" class="muted">覚えた問題：0問</div>
-    <button class="light" id="clearLearned" style="margin-top:8px">覚えたチェックを全部解除</button>
   </section>
 
   <section class="card">
@@ -114,6 +117,7 @@
     <label for="listSearch">問題・答えで検索</label>
     <input id="listSearch" type="search" placeholder="例：ポインタ、Deep Blue、TCP">
     <div id="listSummary" class="status" style="margin-top:10px">読み込み中...</div>
+    <button class="light" id="clearLearned" style="margin-top:8px">表示中の覚えたチェックを全部解除</button>
     <div id="questionList" class="question-list"></div>
   </section>
 
@@ -937,10 +941,27 @@ learnedCurrentEl.addEventListener("change", () => {
 });
 
 document.getElementById("clearLearned").addEventListener("click", () => {
-  learnedIds.clear();
+  const keyword = getListKeyword();
+  const visibleItems = listSubjectItems().filter(item => questionMatchesKeyword(item, keyword));
+  let clearedCount = 0;
+
+  visibleItems.forEach(item => {
+    const id = itemId(item);
+    if (learnedIds.has(id)) {
+      learnedIds.delete(id);
+      clearedCount++;
+    }
+  });
+
   saveLearnedIds();
-  if (queue.length > 0) setProgress("覚えたチェックを全部解除");
-  else updateLearnedInfo();
+
+  if (clearedCount > 0) {
+    setProgress(`表示中の${clearedCount}問の覚えたチェックを解除`);
+  } else if (queue.length > 0) {
+    setProgress("表示中に解除できる覚えたチェックはありません");
+  } else {
+    updateLearnedInfo();
+  }
   syncQuestionListState();
 });
 
