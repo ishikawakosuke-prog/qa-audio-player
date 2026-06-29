@@ -11,7 +11,9 @@
   h1 { font-size: 1.45rem; margin: 0 0 8px; }
   .card { background: white; border: 1px solid #ddd; border-radius: 14px; padding: 16px; margin: 12px 0; box-shadow: 0 1px 4px rgba(0,0,0,.04); }
   label { display: block; margin: 12px 0 4px; font-weight: 650; }
-  select, input[type="number"] { width: 100%; font-size: 1rem; padding: 10px; border-radius: 10px; border: 1px solid #ccc; background: white; }
+  select, input[type="number"], input[type="search"] { width: 100%; font-size: 1rem; padding: 10px; border-radius: 10px; border: 1px solid #ccc; background: white; box-sizing: border-box; }
+  input[type="range"] { width: 100%; }
+  .inline-value { font-weight: 700; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   button { appearance: none; border: 0; border-radius: 12px; padding: 12px 14px; margin: 4px 4px 4px 0; font-size: 1rem; font-weight: 700; background: #111; color: white; }
   button.secondary { background: #555; }
@@ -20,6 +22,19 @@
   .big { font-size: 1.1rem; line-height: 1.7; }
   .muted { color: #666; font-size: .92rem; }
   .pill { display:inline-block; background:#eee; padding:4px 8px; border-radius:999px; margin: 2px; }
+  .question-list { max-height: 520px; overflow: auto; border: 1px solid #ddd; border-radius: 12px; margin-top: 10px; background: #fff; }
+  .subject-section { border-bottom: 1px solid #ddd; }
+  .subject-section:last-child { border-bottom: 0; }
+  .subject-header { position: sticky; top: 0; z-index: 1; background: #f0f0f0; padding: 10px 12px; display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid #ddd; font-weight: 800; }
+  .subject-count { color: #555; font-size: .9rem; font-weight: 650; }
+  .question-item { padding: 12px; border-bottom: 1px solid #eee; }
+  .question-item:last-child { border-bottom: 0; }
+  .question-item.learned { background: #f5f5f5; color: #555; }
+  .question-head { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .question-meta { font-weight: 700; }
+  .question-toggle { display: inline-flex; gap: 6px; align-items: center; margin: 0; font-weight: 650; }
+  .question-body { margin-top: 8px; line-height: 1.55; }
+  .question-answer { margin-top: 4px; color: #444; }
   @media (max-width: 560px) { .row { grid-template-columns: 1fr; } button { width: 100%; margin-right: 0; } }
 </style>
 </head>
@@ -39,16 +54,21 @@
       </div>
       <div>
         <label for="delay">問題のあと答えまでの秒数</label>
-        <input id="delay" type="number" value="3" min="1" max="15" step="1">
+        <input id="delay" type="number" value="0.1" min="0" max="15" step="0.1">
       </div>
     </div>
 
     <label for="voice">声</label>
     <select id="voice"><option>読み込み中...</option></select>
 
+    <label for="rate">読み上げ速度：<span id="rateValue" class="inline-value">1.00倍</span></label>
+    <input id="rate" type="range" value="1.00" min="0.6" max="2.0" step="0.05">
+    <div class="muted">1.00倍が以前の2.00倍相当です。左にするとゆっくり、右にすると速くなります。</div>
+
     <div style="margin-top:14px">
       <label><input id="shuffle" type="checkbox"> シャッフルする</label>
       <label><input id="repeat" type="checkbox"> 最後まで行ったら最初に戻る</label>
+      <label><input id="skipLearned" type="checkbox" checked> 覚えた問題は読み上げない</label>
     </div>
 
     <div style="margin-top:14px">
@@ -56,6 +76,11 @@
       <button class="secondary" id="pause">一時停止</button>
       <button class="secondary" id="resume">再開</button>
       <button class="light" id="stop">停止</button>
+    </div>
+
+    <div style="margin-top:8px">
+      <button class="light" id="prev">← 前の問題</button>
+      <button class="light" id="next">次の問題 →</button>
     </div>
     <p class="muted">iPhone/Androidでは、最初に必ず「開始」をタップしてください。端末によってはマナーモード中でも音量ボタンで音量調整が必要です。</p>
   </section>
@@ -65,14 +90,35 @@
     <hr>
     <div class="big"><strong>問題：</strong><span id="q">---</span></div>
     <div class="big"><strong>答え：</strong><span id="a">---</span></div>
+    <label style="margin-top:12px"><input id="learnedCurrent" type="checkbox" disabled> この問題を覚えた（次から読まない）</label>
+    <div id="learnedInfo" class="muted">覚えた問題：0問</div>
+    <button class="light" id="clearLearned" style="margin-top:8px">覚えたチェックを全部解除</button>
+  </section>
+
+  <section class="card">
+    <strong>問題一覧（覚えたチェック管理）</strong>
+    <p class="muted">問題一覧を科目別に表示します。再生用の科目選択とは別に、ここだけ表示科目を切り替えられます。</p>
+    <label for="listSubject">一覧の表示科目</label>
+    <select id="listSubject">
+      <option value="__ALL__">すべて（科目ごと）</option>
+      <option value="AI人物名">AI人物名</option>
+      <option value="AI用語">AI用語</option>
+      <option value="C言語">C言語</option>
+      <option value="ネットワーク">ネットワーク</option>
+    </select>
+    <label for="listSearch">問題・答えで検索</label>
+    <input id="listSearch" type="search" placeholder="例：ポインタ、Deep Blue、TCP">
+    <div id="listSummary" class="status" style="margin-top:10px">読み込み中...</div>
+    <div id="questionList" class="question-list"></div>
   </section>
 
   <section class="card">
     <strong>使い方</strong>
     <ol>
       <li>科目を選ぶ。</li>
-      <li>答えまでの秒数を決める。</li>
-      <li>「開始」を押す。</li>
+      <li>答えまでの秒数と読み上げ速度を決める。</li>
+      <li>「開始」を押す。途中で「前の問題」「次の問題」も使えます。</li>
+      <li>覚えた問題はチェックすると、次回から読み上げ対象から外れます。</li>
     </ol>
     <p class="muted">画面をロックするとブラウザの読み上げが止まる端末があります。その場合は画面を点けたまま使うか、台本テキストをスマホの読み上げ機能で読ませてください。</p>
   </section>
@@ -81,15 +127,25 @@
 <script id="qa-data" type="application/json">[{"subject": "AI人物名", "number": 1, "question": "ダートマス会議で「人工知能」という単語を使い始めた", "answer": "マッカーシー"}, {"subject": "AI人物名", "number": 2, "question": "Lispの開発者", "answer": "マッカーシー"}, {"subject": "AI人物名", "number": 3, "question": "1950年代ごろ、述語論理を知識表現に用い始めた", "answer": "マッカーシー"}, {"subject": "AI人物名", "number": 4, "question": "チューリングテストの提案者", "answer": "チューリング"}, {"subject": "AI人物名", "number": 5, "question": "情報理論の確立者、チェスに関する最初の論文を投稿した人", "answer": "シャノン"}, {"subject": "AI人物名", "number": 6, "question": "一般問題解決器(GPS)の提案者、1973年、プロダクションシステムを考案した人", "answer": "ニューウェル"}, {"subject": "AI人物名", "number": 7, "question": "一般問題解決器(GPS)の提案者", "answer": "サイモン"}, {"subject": "AI人物名", "number": 8, "question": "パーセプトロンの学習アルゴリズムを提案した人", "answer": "ローゼンブラット"}, {"subject": "AI人物名", "number": 9, "question": "1975年、フレームという知識表現をスキーマや意味ネットワークの概念とともに提案した人", "answer": "ミンスキー"}, {"subject": "AI人物名", "number": 10, "question": "1969年、パーセプトロンの能力の限界を示した", "answer": "ミンスキー"}, {"subject": "AI人物名", "number": 11, "question": "スキーマという知識表現を提案した人", "answer": "バーレット"}, {"subject": "AI人物名", "number": 12, "question": "パラダイムという知識表現を提案した人", "answer": "カーン"}, {"subject": "AI人物名", "number": 13, "question": "1969年、パーセプトロンの能力の限界を示した", "answer": "パパート"}, {"subject": "AI人物名", "number": 14, "question": "誤差逆伝播学習の提案者", "answer": "ルメルハート"}, {"subject": "AI人物名", "number": 15, "question": "アーチの概念の学習の提案者", "answer": "ウィンストン"}, {"subject": "AI人物名", "number": 16, "question": "バージョン空間法の提案者", "answer": "ミッチェル"}, {"subject": "AI人物名", "number": 17, "question": "決定木の学習法ID3、C4.5の提案者", "answer": "クィンラン"}, {"subject": "AI人物名", "number": 18, "question": "知識工学の提案者", "answer": "ファイゲンバウム"}, {"subject": "AI人物名", "number": 19, "question": "計算論的学習理論の代表的なものであるPAC学習の提案者", "answer": "バリアント"}, {"subject": "AI人物名", "number": 20, "question": "決定木の学習法CLSの考案者", "answer": "ハント"}, {"subject": "AI人物名", "number": 21, "question": "ファジィ理論の提案者", "answer": "ザデー"}, {"subject": "AI人物名", "number": 22, "question": "スチームエンジンの自動制御の人", "answer": "マムダニ"}, {"subject": "AI人物名", "number": 23, "question": "ファジィ数を定義した人(二人)", "answer": "デュボー、プラウド"}, {"subject": "AI人物名", "number": 24, "question": "自己組織化ニューラルネットワークの提案", "answer": "甘利"}, {"subject": "AI人物名", "number": 25, "question": "セメントキルンのファジィコントローラを開発", "answer": "F.L.Smith社"}, {"subject": "AI人物名", "number": 26, "question": "ファジィコントローラによる仙台市営地下鉄での自動運転制御", "answer": "日立製作所"}, {"subject": "AI人物名", "number": 27, "question": "浴槽システムのファジィ制御による定温制御装置", "answer": "松下電器産業"}, {"subject": "AI人物名", "number": 28, "question": "ニューロンの数理モデルの提案者(二人)", "answer": "マッカラック、ピッツ"}, {"subject": "AI人物名", "number": 29, "question": "ニューロンの出力のみが学習に関係しているとして学習方式を提案した人", "answer": "ヘブ"}, {"subject": "AI人物名", "number": 30, "question": "GA(遺伝的アルゴリズム)の基礎を確立した人,スキーマ定理を提唱し", "answer": "ホランド"}, {"subject": "AI人物名", "number": 31, "question": "最適化手法としてGA(遺伝的アルゴリズム)を評価した人", "answer": "デジョング"}, {"subject": "AI人物名", "number": 32, "question": "GA(遺伝的アルゴリズム)の理論から、ガスパイプラインの配置計画などの応用まで幅広く研究を進めた人", "answer": "ゴールドバーク"}, {"subject": "AI人物名", "number": 33, "question": "進化戦略(ES)を研究し始めた人(二人)", "answer": "ラヒンバーグ、シュウフェル"}, {"subject": "AI人物名", "number": 34, "question": "進化プログラミング(EP)を始めた人", "answer": "フォーゲル"}, {"subject": "AI人物名", "number": 35, "question": "遺伝的プログラミング(GP)を提唱した人", "answer": "コザ"}, {"subject": "AI人物名", "number": 36, "question": "ミニマックス法を考案", "answer": "ノイマン"}, {"subject": "AI人物名", "number": 37, "question": "自己再生可能な機械を可能とする自己増殖オートマトンを示した", "answer": "ノイマン"}, {"subject": "AI人物名", "number": 38, "question": "自然言語解析の基礎を与えた生成文法理論", "answer": "チョムスキー"}, {"subject": "AI人物名", "number": 39, "question": "精神科セラピストの役割を演じるELIZAの開発", "answer": "ワイゼンバウム"}, {"subject": "AI人物名", "number": 40, "question": "スクリプトによる知識表現を提案", "answer": "シャンク"}, {"subject": "AI人物名", "number": 41, "question": "「サイバネティクス」という語を用いた", "answer": "ウィナー"}, {"subject": "AI人物名", "number": 42, "question": "ロボット３原則を発表", "answer": "アシモフ"}, {"subject": "AI人物名", "number": 43, "question": "論理プログラムからの帰納的合成システムMISの提案者", "answer": "シャピロ"}, {"subject": "AI人物名", "number": 44, "question": "最初のコンピュータENIACの開発", "answer": "エッカート、モークリー"}, {"subject": "AI人物名", "number": 45, "question": "チェッカーというゲームプログラムを作成", "answer": "サミュエル"}, {"subject": "AI人物名", "number": 46, "question": "機械進化(現在の遺伝的アルゴリズム)の実験", "answer": "フリードベルク"}, {"subject": "AI人物名", "number": 47, "question": "最初のエキスパートシステムであるMYCINを開発", "answer": "ショートリッフェ"}, {"subject": "AI人物名", "number": 48, "question": "人工生命の研究を開始", "answer": "ラングトン"}, {"subject": "AI人物名", "number": 49, "question": "積み木遊びで使われる英語を理解するSHRDLUのデモ", "answer": "ウィノグラード"}, {"subject": "AI人物名", "number": 50, "question": "Prologの開発", "answer": "カルメラウアー"}, {"subject": "AI人物名", "number": 51, "question": "C言語の開発", "answer": "カーハニン、リッチー"}, {"subject": "AI人物名", "number": 52, "question": "最初のコンピュータ制御自律車Stanford Cartを開発", "answer": "モラヴェッツ"}, {"subject": "AI人物名", "number": 53, "question": "コネクションマシンの設計", "answer": "ヒリス"}, {"subject": "AI人物名", "number": 54, "question": "最初の表計算ソフトVisicalcを開発", "answer": "ブリックリン"}, {"subject": "AI人物名", "number": 55, "question": "黒板モデルについて発表", "answer": "アーマン、ヘイズ＝ロス、レッサー、レディ"}, {"subject": "AI人物名", "number": 56, "question": "人工株式市場", "answer": "アーサー"}, {"subject": "AI人物名", "number": 57, "question": "チェスプログラムDeepBlueが勝利したチェスチャンピオン", "answer": "カスパロフ"}, {"subject": "AI人物名", "number": 58, "question": "WWW(World Wide Web)を開発", "answer": "バーナーズ＝リー"}, {"subject": "AI人物名", "number": 59, "question": "クラークの小説「2001年宇宙の旅」が映画化", "answer": "クラーク"}, {"subject": "AI人物名", "number": 60, "question": "クラークの小説「2001年宇宙の旅」で登場した人工知能", "answer": "人工知能HAL9000"}, {"subject": "AI人物名", "number": 61, "question": "対話的グラフィックスを利用したスケッチパットの論文を発表", "answer": "サースランド"}, {"subject": "AI人物名", "number": 62, "question": "鉄腕アトムの作者", "answer": "手塚治虫"}, {"subject": "AI人物名", "number": 63, "question": "アルビン（ALVINN）の開発者", "answer": "ポメルロー"}, {"subject": "AI人物名", "number": 64, "question": "1969年に開発されたチェスコンピュータ。これはC級 と呼ばれる「平均的な人間」 レベルの強 さを持つ。", "answer": "MACHACK-6"}, {"subject": "AI人物名", "number": 65, "question": "1988年にカーネギーメロン大学の5人の大学院生が開発したDeep Blueの前身となるもの。", "answer": "Deep Thought"}, {"subject": "AI用語", "number": 1, "question": "チェス専用システムが人間の世界チャンピオンを破ったか、このシステムの名前はなに？", "answer": "Deep Blue"}, {"subject": "AI用語", "number": 2, "question": "日本でPrologを用いて研究開発されたコンピュータをなんという？", "answer": "第5世代コンピュータ"}, {"subject": "AI用語", "number": 3, "question": "簡単な構文操作をするだけで自然な会話をするプログラムは何か", "answer": "ELIZA"}, {"subject": "AI用語", "number": 4, "question": "1969年に稼働開始した軍事用ネットワークは何か", "answer": "ARPA-net"}, {"subject": "AI用語", "number": 5, "question": "人工知能分野において対立がみられる二つの主義は何か", "answer": "シンボリズム(記号主義)とコネクショニズム(結合主義)"}, {"subject": "AI用語", "number": 6, "question": "言語処理において自然言語の分を意味を持つ最小の言語単位に分割しそれぞれの単位の持つ性質を明らかにすること", "answer": "形態素解析"}, {"subject": "AI用語", "number": 7, "question": "closedリストを導入したアルゴリズムは何が保証される？", "answer": "停止性"}, {"subject": "AI用語", "number": 8, "question": "closed,openリストを導入したアルゴリズムは何が保証される？", "answer": "停止性、完全性"}, {"subject": "AI用語", "number": 9, "question": "縦形探索のopenリストはどういうデータ構造により実現される？", "answer": "スタック"}, {"subject": "AI用語", "number": 10, "question": "縦型探索の利点と欠点は", "answer": "メモリを使わないが、時間がかかる。グラフが無限だと停止しない"}, {"subject": "AI用語", "number": 11, "question": "横形探索のopenリストはどういうデータ構造により実現される？", "answer": "キュー"}, {"subject": "AI用語", "number": 12, "question": "横型探索の利点と欠点は", "answer": "グラフが無限でも解があれば発見できるが、メモリ不足になる可能性がある"}, {"subject": "AI用語", "number": 13, "question": "均一コスト探索のアルゴリズムは何が保証される？", "answer": "適格性"}, {"subject": "AI用語", "number": 14, "question": "ヒューリスティック探索で最適解を得るためにはどういう条件が必要？", "answer": "評価関数が実際の最適値より小さいとき"}, {"subject": "AI用語", "number": 15, "question": "プロダクションシステムを構成する三つの要素を答えよ", "answer": "推論エンジン、知識ベース(＝長期メモリ)、作業領域(＝短期メモリ)"}, {"subject": "AI用語", "number": 16, "question": "長期メモリとは？", "answer": "長く保存される知識が保存される場所、知識ベースとも呼ばれる、プロダクションシステムではif-thenルールが格納される"}, {"subject": "AI用語", "number": 17, "question": "短期メモリとは？", "answer": "一時的なデータの格納場所。作業領域とも呼ばれる。プロダクションシステムでは外部から与えられたデータや推論中に得られた結果を記憶する"}, {"subject": "AI用語", "number": 18, "question": "推論エンジンとは？", "answer": "作業領域の示す状態に条件が満足するルールを知識べースから獲得し、その中から一つのルールを実行する部分"}, {"subject": "AI用語", "number": 19, "question": "前向き推論のサイクルを答えよ", "answer": "１．照合 ２．競合解消 ３．実行"}, {"subject": "AI用語", "number": 20, "question": "後向き推論のサイクルを答えよ", "answer": "１．照合 ２．ルールの選択 ３．検証"}, {"subject": "AI用語", "number": 21, "question": "推論で得られたデータとルールの関係を示した図をなんという？", "answer": "推論ネットワーク"}, {"subject": "AI用語", "number": 22, "question": "プロダクションシステムは、ルールの○○と○○と○○が自由に行えるので、知識の○○と○○と○○に簡単に対応できる、空欄に入る言葉三つは何か", "answer": "追加、修正、削除"}, {"subject": "AI用語", "number": 23, "question": "典型的な形の知識をなんという？", "answer": "典型的知識"}, {"subject": "AI用語", "number": 24, "question": "階層的な関係を示す知識をなんという？", "answer": "階層的知識"}, {"subject": "AI用語", "number": 25, "question": "事象に付随した動作や処理に関する知識をなんという？", "answer": "手続き的知識"}, {"subject": "AI用語", "number": 26, "question": "フレームは、どのような知識を表現するために作られた？", "answer": "うまくまとめられた知識。例えば典型的知識、階層的知識、手続き的知識"}, {"subject": "AI用語", "number": 27, "question": "問題領域を表現するための語彙の意味と関係や制約を示したもの、これはなんのこと？", "answer": "オントロジー"}, {"subject": "AI用語", "number": 28, "question": "自己の行動規範と内部状態を持ち外界とのやり取りを行う自立的行動体、これのことをなんという？", "answer": "agent"}, {"subject": "AI用語", "number": 29, "question": "経験を積むことで、素早い判断ができるようになる学習、これをなんという？", "answer": "効率化学習"}, {"subject": "AI用語", "number": 30, "question": "助言を自分なりに変換して覚える学習、これをなんという？", "answer": "助言に基づく学習"}, {"subject": "AI用語", "number": 31, "question": "試行錯誤の結果としての学習、これをなんという？", "answer": "行動による学習、自律的学習、強化学習"}, {"subject": "AI用語", "number": 32, "question": "教師側エージェントを主体とする学習、これをなんという？", "answer": "ITS(intelligent tutoring system)"}, {"subject": "AI用語", "number": 33, "question": "現象を見つけて成立する法則を見つけ出す高度な推論、これをなんという？", "answer": "発見的学習"}, {"subject": "AI用語", "number": 34, "question": "九九など丸暗記する学習、これをなんという？", "answer": "暗記学習"}, {"subject": "AI用語", "number": 35, "question": "求解したときの推論を解析してルールを形成し、応答速度を向上させる手法、strip以降研究されてきた効率化学習、これをなんという？", "answer": "説明に基づく学習 EBL(explanation_based_learning)"}, {"subject": "AI用語", "number": 36, "question": "決定木の学習法、情報量を基準にして学習している、これはなに？", "answer": "id3、その発展形としてC4.5がある"}, {"subject": "AI用語", "number": 37, "question": "学習アルゴリズムの良さを計算論的に評価する考え、これは何？", "answer": "計算論的学習理論"}, {"subject": "AI用語", "number": 38, "question": "学習領域に確率論的な要素を仮定、学習された概念と学習目標の概念との差を許容し、近似的な学習をするモデルを採用する、これは何？", "answer": "PAC学習、計算論的学習理論の代表的な理論である"}, {"subject": "AI用語", "number": 39, "question": "自分の知識では説明できない場合に、知識を補うこと、これはなに？", "answer": "知識調節(knowledge_accommodation)"}, {"subject": "AI用語", "number": 40, "question": "得られるべき知識や規則が持つ性質、記述に対する制約、これはなに？", "answer": "バイアス(bias)"}, {"subject": "AI用語", "number": 41, "question": "妥当な規則の候補の中から特定のいくつかを選択する基準、これはなに？", "answer": "操作性規範(operationality_criterion)"}, {"subject": "AI用語", "number": 42, "question": "集合全体の性質を予測するような学習、これはなに？", "answer": "帰納的学習"}, {"subject": "AI用語", "number": 43, "question": "知識ベースを調節、管理すること、これはなに？", "answer": "知識同化(knowledge_assimilation)"}, {"subject": "AI用語", "number": 44, "question": "概念に適合する具体例、これをなんという？", "answer": "正の例"}, {"subject": "AI用語", "number": 45, "question": "概念に適合しない具体例、これをなんという？", "answer": "負の例"}, {"subject": "AI用語", "number": 46, "question": "ウィンストンのアーチの学習において、ほんの少しの違いで正の例になり損ねた負の例、これをなんという？", "answer": "ニアミス"}, {"subject": "AI用語", "number": 47, "question": "記述能力が制限されるが計算量が比較的少ない表現、これはなに？", "answer": "決定木"}, {"subject": "AI用語", "number": 48, "question": "決定木表現に対し、述語論理表現はどのような特徴があるか", "answer": "広範な知識を対象にできるが、探索空間が広がりすぎる"}, {"subject": "AI用語", "number": 49, "question": "ハント(hunt)らに考案された決定木学習アルゴリズム、これはなに？", "answer": "CLS"}, {"subject": "AI用語", "number": 50, "question": "効率化学習でのロボットのための行動計画システムの有名なものを二つあげよ", "answer": "STRIPS(stanford reserch institute problem solver)のマクロオペレータ、汎用問題解決機能Soarのチャンキング"}, {"subject": "AI用語", "number": 51, "question": "事例の類似性から学習する、ウィンストンのアーチの帰納的学習など", "answer": "類似性に基づく学習、SBL(similarity_based_learning)"}, {"subject": "AI用語", "number": 52, "question": "EBLにおいて、訓令事例が目標概念の一例であることの証明、これをなんという？", "answer": "説明"}, {"subject": "AI用語", "number": 53, "question": "推論をまとめることで演繹過程を飛ばして効率化できる、深い知識から浅い知識のコンパイル、これをなんという？", "answer": "知識コンパイル"}, {"subject": "AI用語", "number": 54, "question": "どういう基準で学習によって生成される規則を採用するかという問題をなんというか", "answer": "効用問題、utility_problem"}, {"subject": "AI用語", "number": 55, "question": "効用問題の原因は何か", "answer": "探索空間増加による探索時間の増加と効率化規則適用による時間短縮のトレードオフ"}, {"subject": "AI用語", "number": 56, "question": "効用問題の解決策にはどのようなものがあるか", "answer": "規則の利用回数を記録し、利用率の低い規則を削除する"}, {"subject": "AI用語", "number": 57, "question": "強化学習などにおいてエージェントが複数存在する状況のことをなんというか", "answer": "マルチエージェント"}, {"subject": "AI用語", "number": 58, "question": "EBLの入力を4つ挙げよ", "answer": "目標概念、訓令事例、領域知識、操作性規範"}, {"subject": "AI用語", "number": 59, "question": "EBLの出力は何か", "answer": "操作性規範として与えられる条件を満たすような目標概念の定義記述"}, {"subject": "AI用語", "number": 60, "question": "EBLにおけるバイアスは何か", "answer": "領域知識と操作性規範"}, {"subject": "AI用語", "number": 61, "question": "SBLとEBLにおいて訓令事例について比較せよ", "answer": "SBLは多くの例が必要だが、EBLは少数でよい"}, {"subject": "AI用語", "number": 62, "question": "SBLとEBLにおいて事前知識について比較せよ", "answer": "EBLは豊富な事前知識が必要だが、SBLは定義やクラス関係の説明程度の事前知識でよい"}, {"subject": "AI用語", "number": 63, "question": "SBLとEBLの推論の種類はそれぞれ何か？", "answer": "SBL:帰納、EBL演繹"}, {"subject": "AI用語", "number": 64, "question": "SBLとEBLにおいて生成知識の正しさについて比較せよ", "answer": "SBLは生成した知識が正しい保証はないが、EBLは正しさが保証されている"}, {"subject": "AI用語", "number": 65, "question": "SBLとEBLにおいて本質的な知識の増加について比較せよ", "answer": "EBLは本質的な知識の増加はないが、SBLはある"}, {"subject": "AI用語", "number": 66, "question": "SBLとEBLにおいてそれぞれの学習の目的はなにか", "answer": "SBLは概念形成、EBLは効率化が目的"}, {"subject": "AI用語", "number": 67, "question": "エージェントは外界からの情報を獲得するものを持つ、これをなんという？", "answer": "知覚器(sensor)"}, {"subject": "AI用語", "number": 68, "question": "エージェントは環境に対して影響を与えるためのものを持つ、これをなんという？", "answer": "効果器(effector)"}, {"subject": "AI用語", "number": 69, "question": "ザデーによって考案された、人間の曖昧性を数学モデルとして取り扱うための理論、これをなんという？", "answer": "ファジィ理論"}, {"subject": "AI用語", "number": 70, "question": "ファジィ集合の所属度を表しているもの、これをなんという？", "answer": "メンバシップ値"}, {"subject": "AI用語", "number": 71, "question": "ファジィ集合を定義するもの、これをなんという？", "answer": "メンバシップ関数"}, {"subject": "AI用語", "number": 72, "question": "通常の集合の境界をあいまいにしたもの、メンバシップ関数により定義される、これをなんという？", "answer": "ファジィ集合"}, {"subject": "AI用語", "number": 73, "question": "ファジィ集合でない通常の集合、これをなんという？", "answer": "クリスプ集合"}, {"subject": "AI用語", "number": 74, "question": "連続性、正規性、凸性を満足するファジィ集合をなんという？", "answer": "ファジィ数"}, {"subject": "AI用語", "number": 75, "question": "ファジィ数の二項演算の定義的なものをなんという？", "answer": "拡張原理"}, {"subject": "AI用語", "number": 76, "question": "ファジィ集合を用いたプロダクションルールをなんという？", "answer": "ファジィルール"}, {"subject": "AI用語", "number": 77, "question": "三層のパーセプトロンではある論理演算を実現できない、この論理演算は何か", "answer": "排他的論理和(EXOR:Exclusive OR)"}, {"subject": "AI用語", "number": 78, "question": "有名なニューラルネットワークのモデルを４つ", "answer": "ホップフィールドモデル、LVQ、コグニトロン、ボルツマンマシン"}, {"subject": "AI用語", "number": 79, "question": "階層型ニューラルネットワークなどの学習において訓練サンプルに特化した学習を行いすぎ、未知のデータに対応できなくなること", "answer": "過学習"}, {"subject": "AI用語", "number": 80, "question": "誤差逆伝播学習において関数が持つべき性質、また、有用な関数を一つ挙げよ", "answer": "微分可能、シグモイド関数"}, {"subject": "AI用語", "number": 81, "question": "体の特定の部分をよく用いればそこが発達し、使用しないと退化するような獲得形質が遺伝する進化説", "answer": "ラマルク進化説"}, {"subject": "AI用語", "number": 82, "question": "純粋に自然選択のみを認める進化説", "answer": "ネオダーウィニズム"}, {"subject": "AI用語", "number": 83, "question": "自然選択を基礎とし、突然変異、交雑、隔離などから総合的に説明する、現在のGAのもととなる進化説", "answer": "総合進化説"}, {"subject": "AI用語", "number": 84, "question": "生物にとって中立的な突然変異の蓄積が重要な役割を果たすとする進化説", "answer": "中立進化説"}, {"subject": "AI用語", "number": 85, "question": "細胞同士が合体して強制により新しい細胞が誕生したとする説", "answer": "連続共生説"}, {"subject": "AI用語", "number": 86, "question": "遺伝子がウイルスによって生物から生物に運ばれるとする説", "answer": "ウイルス進化説"}, {"subject": "AI用語", "number": 87, "question": "遺伝情報が記述されている位置をなんという？", "answer": "遺伝子座"}, {"subject": "AI用語", "number": 88, "question": "各遺伝子座に対して形質を決定するコードをなんという？", "answer": "遺伝子"}, {"subject": "AI用語", "number": 89, "question": "遺伝子の組み合わせの内部表現をなんという？", "answer": "遺伝子型"}, {"subject": "AI用語", "number": 90, "question": "遺伝子型に基づいて形成された各個体の形質をなんという？", "answer": "表現型"}, {"subject": "AI用語", "number": 91, "question": "GAにおいてN個体からM組のペアをランダムに生成し、ある位置で染色体を交換する、これをなんという？", "answer": "交叉"}, {"subject": "AI用語", "number": 92, "question": "GAにおいて遺伝子座の値を強制的に変更する、これをなんという？", "answer": "突然変異"}, {"subject": "AI用語", "number": 93, "question": "GAの選択の手法、適応度の違いを拡大、縮小させること、この手法をなんという？", "answer": "スケーリング"}, {"subject": "AI用語", "number": 94, "question": "GAにおいて、適応度の高いものからランク付けし、ランクによって選出確率を設定すること、この手法をなんという？", "answer": "ランク法"}, {"subject": "AI用語", "number": 95, "question": "GAにおいて、前世代の最良個体が現世代に存在しないならば、それを加える、この手法をなんという？", "answer": "エリート保存法"}, {"subject": "AI用語", "number": 96, "question": "GAにおいて交叉位置を複数設けること、これをなんという？", "answer": "多点交叉"}, {"subject": "AI用語", "number": 97, "question": "GAにおいて、マスクパターンが1のところを交換する、これをなんという？", "answer": "一様交叉"}, {"subject": "AI用語", "number": 98, "question": "染色体表現(コーディング)において、ビット列を用いて数値表現を行うとき、どのようなコードを使うのが一般的？", "answer": "グレイコード"}, {"subject": "AI用語", "number": 99, "question": "GAにおいて、集団が小さい場合、複数の小集団に分け、定期的に移民させるGAをなんという？", "answer": "分散GA"}, {"subject": "AI用語", "number": 100, "question": "ホランド考案、遺伝的アルゴリズムを数学的に説明するものをなんという？", "answer": "スキーマ定理"}, {"subject": "AI用語", "number": 101, "question": "染色体が1次元の文字列で表現されるとき、意味のあるパターンが発生する、このパターンのことをなんという？", "answer": "スキーマ"}, {"subject": "AI用語", "number": 102, "question": "進化をキーワードとする研究を総称してなんという？", "answer": "進化的計算(EC)"}, {"subject": "AI用語", "number": 103, "question": "進化戦略(ES)とGAの違いは何か？", "answer": "GAは多様な染色体表現を扱うのに対し、ESは実数空間を定義域とする非線形最適化問題を解くことを主な目的としている。また、GAは交叉を主な遺伝的操作とし、ESは突然変異を主な遺伝的操作とする"}, {"subject": "AI用語", "number": 104, "question": "有限状態オートマトンを進化させる枠組み、これをなんという？", "answer": "進化プログラミング(EP)"}, {"subject": "AI用語", "number": 105, "question": "GAの遺伝子座を拡張し、グラフ構造(主に木構造)を扱えるようにしたものをなんという？", "answer": "遺伝的プログラミング(GP)"}, {"subject": "AI用語", "number": 106, "question": "それぞれの記号に対応したパターンの集合をなんというか", "answer": "クラス(=カテゴリ)"}, {"subject": "AI用語", "number": 107, "question": "特徴をX=(x_1,,,,x_n)で表したものをなんというか", "answer": "特徴パターン(特徴ベクトル)、nは特徴パターン空間の次元と呼ばれる"}, {"subject": "AI用語", "number": 108, "question": "与えらえたパターンからその特徴を求める処理をなんというか", "answer": "特徴抽出"}, {"subject": "AI用語", "number": 109, "question": "パターン認識において、クラスを代表する特徴パターンのことをなんというか", "answer": "参照パターン"}, {"subject": "AI用語", "number": 110, "question": "パターン認識において、クラスの識別に用いる関数をなんというか", "answer": "識別関数"}, {"subject": "AI用語", "number": 111, "question": "パターン認識において、クラスの境界面をなんというか", "answer": "識別境界面"}, {"subject": "AI用語", "number": 112, "question": "識別関数が入力パターンの一次式でかける関数のことをなんというか", "answer": "線形識別関数"}, {"subject": "AI用語", "number": 113, "question": "パターン認識の性能の評価で学習に用いた例題で評価する方法をなんというか", "answer": "クローズド評価"}, {"subject": "AI用語", "number": 114, "question": "パターン認識の性能の評価で学習に用いていない例題で評価する方法をなんというか", "answer": "オープン評価"}, {"subject": "AI用語", "number": 115, "question": "パターン認識において、入力パターンを最も近い例題のクラスに分類する方法をなんというか", "answer": "NN(nearest_neighbor)識別法"}, {"subject": "AI用語", "number": 116, "question": "パターン認識において、一つのクラスに複数の参照パターンを用意しておく方法をなんというか", "answer": "マルチテンプレート法"}, {"subject": "AI用語", "number": 117, "question": "パターン認識において、最も近いk個の例題を探し、最も多数の例題が属するクラスへ分類する方法をなんというか", "answer": "k-NN(k-nearest_neighbor)識別法"}, {"subject": "AI用語", "number": 118, "question": "パターン認識において、損失関数を最小にするクラスを入力が属するクラスであると判断する方法をなんというか", "answer": "ベイズ識別"}, {"subject": "AI用語", "number": 119, "question": "パターン認識において、パターンがある確率分布をなしていると仮定し、そのパラメータを用いて認識することをなんというか", "answer": "パラメトリックな認識"}, {"subject": "AI用語", "number": 120, "question": "パターン認識において、間違ったクラスへ分類したときの損失を表す関数のことをなんというか", "answer": "損失関数"}, {"subject": "AI用語", "number": 121, "question": "単独で発声された孤立単語認識をなんというか", "answer": "孤立単語認識"}, {"subject": "AI用語", "number": 122, "question": "パターン認識において、パターンの確率分布を仮定せず、パターンのみで判断する方法をなんというか", "answer": "ノンパラメトリックな認識"}, {"subject": "AI用語", "number": 123, "question": "音声パターン認証では短い区間にわけて分類を行うが、この区間のことをなんというか", "answer": "フレーム(分析窓)"}, {"subject": "AI用語", "number": 124, "question": "動的計画法を用いて二つの特徴パターンの距離を求める方法をなんというか", "answer": "DPマッチング、DTW"}, {"subject": "AI用語", "number": 125, "question": "連続音声認識などで広く使われている音響モデルは何か", "answer": "隠れマルコフモデル"}, {"subject": "AI用語", "number": 126, "question": "状態遷移列の確率をその最大値で近似して音声認識を行う方法をなんというか", "answer": "ビタービ(viterbi)アルゴリズム(数式はp112参考)"}, {"subject": "AI用語", "number": 127, "question": "過去の(n-1)語の単語について考える方法をなんというか", "answer": "n-gram(n=1,2,3のとき、それぞれunigram,bigram,trigramという)"}, {"subject": "AI用語", "number": 128, "question": "マッカーシーが考案した人工知能言語はなにか", "answer": "Lisp"}, {"subject": "AI用語", "number": 129, "question": "Lispはどういう言語か", "answer": "関数型言語"}, {"subject": "AI用語", "number": 130, "question": "Lispでの関数の記述方法", "answer": "前置記法"}, {"subject": "AI用語", "number": 131, "question": "Lispにおける再帰構造を持つデータとは何か", "answer": "リスト、リストの構成要素はリストとアトムである"}, {"subject": "AI用語", "number": 132, "question": "Lispにおける、最小の要素のデータ、それ一個一個で完結している文字の並びのことをなんというか", "answer": "アトム"}, {"subject": "AI用語", "number": 133, "question": "Lispにおけるリストとリストを構成するより小さい単位アトムのことをなんというか", "answer": "S式(symbolic expression)"}, {"subject": "AI用語", "number": 134, "question": "Lispにおけるリストをプログラムとして実行する組み込み関数(=データをプログラム化する関数)は何か", "answer": "eval"}, {"subject": "AI用語", "number": 135, "question": "Lispにおけるプログラムをデータ化する関数は何か", "answer": "quote"}, {"subject": "AI用語", "number": 136, "question": "リストの最初の要素を取り出すlispの組み込み関数", "answer": "first"}, {"subject": "AI用語", "number": 137, "question": "リストの最初の要素を除いた残りのリストを取り出すLispの組み込み関数は何か", "answer": "rest"}, {"subject": "AI用語", "number": 138, "question": "Lispにおける二つの引数を取り、引数を左から順に並べたものリストを作成する関数は何か", "answer": "append"}, {"subject": "AI用語", "number": 139, "question": "Lispにおける任意の数の引数を取り、それぞれの引数を要素とするリストを作成する関数は何か", "answer": "list"}, {"subject": "AI用語", "number": 140, "question": "Lispにおける二つの引数を取り、第一引数がfirst,第二引数がrestとなるリストを作成する関数は何か", "answer": "cons"}, {"subject": "AI用語", "number": 141, "question": "Lispのif文をなんと書くか", "answer": "cond文"}, {"subject": "AI用語", "number": 142, "question": "for分に相当するloopという関数を備えているなど標準化されたlispのことをなんというか", "answer": "CommonLisp"}, {"subject": "AI用語", "number": 143, "question": "純粋なLispの言語仕様のみ実装されたlispのことをなんというか", "answer": "Scheme"}, {"subject": "AI用語", "number": 144, "question": "Prologはどういう言語か", "answer": "論理型言語"}, {"subject": "AI用語", "number": 145, "question": "prologは何を基礎理論とするプログラミング言語であるか", "answer": "述語理論"}, {"subject": "AI用語", "number": 146, "question": "prologにおけるプログラムに相当するものをなんというか", "answer": "論理式"}, {"subject": "AI用語", "number": 147, "question": "Prologにおける論理式の定義の基礎となるものは何か", "answer": "素論理式"}, {"subject": "AI用語", "number": 148, "question": "prologにおけるデータに相当するものをなんというか", "answer": "項"}, {"subject": "AI用語", "number": 149, "question": "prologにおけるA1,A2,...,An->Bであらわされる複数の理論式から機械的に新しい論理式を構成する方法をなんというか", "answer": "導出原理"}, {"subject": "AI用語", "number": 150, "question": "prologが対象とするA1,A2,...,An->Bであらわされる制作された論理式自体のことをなんというか", "answer": "Horn論理式"}, {"subject": "AI用語", "number": 151, "question": "prologにおける条件部も結論部もない論理式のことをなんというか", "answer": "矛盾"}, {"subject": "AI用語", "number": 152, "question": "prologにおける A1,A2,...,An->(結論部がない)論理式(a1からamは同時に成立しないという意味)を何節というか", "answer": "質問節"}, {"subject": "AI用語", "number": 153, "question": "prologにおける A1,A2,...,An->Bで表される論理式のことを何節というか", "answer": "規則節"}, {"subject": "AI用語", "number": 154, "question": "prologにおける ->Bと表現される(条件部がない)論理式を何節というか", "answer": "事実節"}, {"subject": "AI用語", "number": 155, "question": "prologにおける二つの項に含まれる変数に適切な値を代入して二つの項を同一の項にする操作をなんというか", "answer": "単一化"}, {"subject": "AI用語", "number": 156, "question": "prologにおけるオアの関係にあるものを選択して再度実行してくれる機能をなんというか", "answer": "自動後戻り"}, {"subject": "AI用語", "number": 157, "question": "prologにおけるバックトラックを行わない機能をなんというか", "answer": "カットシンボル"}, {"subject": "AI用語", "number": 158, "question": "prologにおける論理式の追加を行う述語は何か", "answer": "assert"}, {"subject": "AI用語", "number": 159, "question": "prologにおけるプログラムを動的に作成する述語は何か", "answer": "univ"}, {"subject": "AI用語", "number": 160, "question": "prologにおける論理式の削除を行う述語は何か", "answer": "retract"}, {"subject": "AI用語", "number": 161, "question": "あらかじめ用意されている標準の述語のことをなんという？", "answer": "組込み述語(BIPS)"}, {"subject": "AI用語", "number": 162, "question": "決定木の学習アルゴリズムの良さの尺度を三つあげよ", "answer": "汎化性、了解性、コスト"}, {"subject": "AI用語", "number": 163, "question": "自然言語の文を意味を持つ最小の言語単位に分割し、それぞれの単位の持つ性質を明らかにすることをなんというか", "answer": "形態素解析"}, {"subject": "AI用語", "number": 164, "question": "プログラミング言語の視点から挙げられる人間の特徴を四つあげよ", "answer": "記号性、階層性、再帰性、成長性"}, {"subject": "C言語", "number": 1, "question": "ポインタとは？", "answer": "他のデータへの参照を示すデータ型"}, {"subject": "C言語", "number": 2, "question": "構造体とは？", "answer": "異なる型を持つデータを一まとめにしたもの"}, {"subject": "C言語", "number": 3, "question": "列挙型とは？", "answer": "あらかじめ取りうる値が限定されている型"}, {"subject": "C言語", "number": 4, "question": "抽象データ型とは？", "answer": "データの型とその型に対する一連の操作を組みにしたもの"}, {"subject": "C言語", "number": 5, "question": "カプセル化とは？", "answer": "データとそのデータに対する操作手続きを組みにすること"}, {"subject": "C言語", "number": 6, "question": "charは何バイト使用するか", "answer": "1バイト"}, {"subject": "C言語", "number": 7, "question": "intは何バイト使用するか", "answer": "4バイト"}, {"subject": "C言語", "number": 8, "question": "doubleは何バイト使用するか", "answer": "8バイト"}, {"subject": "C言語", "number": 9, "question": "floatは何バイト使用するか", "answer": "4バイト"}, {"subject": "C言語", "number": 10, "question": "ポインタは何バイト使用するか", "answer": "4バイト(32bit OS)または8バイト(64bit OS)"}, {"subject": "C言語", "number": 11, "question": "線形探索法の計算量は？", "answer": "O(n)"}, {"subject": "C言語", "number": 12, "question": "二分探索法の探索の計算量は？また、それはなぜ？", "answer": "1回ループを繰り返すたび、着目する範囲が半分になるので、ループが実行される回数は高々log_2(n)になる"}, {"subject": "C言語", "number": 13, "question": "二分探索木の利点は？", "answer": "探索、挿入、削除をO(log n)で行える。 通り掛け順ならソートされた順番で得られる。"}, {"subject": "C言語", "number": 14, "question": "二分探索の挿入、削除でなぜ、ポインタのポインタ型の変数を使わなければならないのか？", "answer": "挿入、削除位置の節の親のポインタも変更しなければならないから"}, {"subject": "C言語", "number": 15, "question": "スタックの挿入と削除の計算量は？", "answer": "O(1)"}, {"subject": "C言語", "number": 16, "question": "キューの挿入と削除の計算量は？", "answer": "O(1)"}, {"subject": "C言語", "number": 17, "question": "キューの実装にリングバッファという構造を使うことがあるが、配列が空、フルのとき先頭を指すfrontと最後の要素の次を指すrearが同じところを指すことになる．それを解消するためにはどうすればよいか", "answer": "キューが空であることを示すフラグを用意する、必ず一つ空の要素を用意する"}, {"subject": "C言語", "number": 18, "question": "配列では要素を○○アクセスできるが、連結リストでは○○アクセスしかできない、〇に入る言葉は？", "answer": "順にランダム、シーケンシャル"}, {"subject": "C言語", "number": 19, "question": "単純な連結リストの挿入、削除の計算量は？", "answer": "O(1)"}, {"subject": "C言語", "number": 20, "question": "使用されていないメモリをシステムが自動で開放することをなんというか", "answer": "ガベージコレクション"}, {"subject": "C言語", "number": 21, "question": "リストにヘッダーを導入することのメリット・デメリットは？", "answer": "メリット：すべての場所に対する挿入と削除を統一して扱える デメリット：headを飛ばす処理が必要、リストの着目点が固定される"}, {"subject": "C言語", "number": 22, "question": "数式の木を行きがけ順でなぞると何記法になる？", "answer": "前置記法"}, {"subject": "C言語", "number": 23, "question": "数式の木を帰りがけ順でなぞると何記法になる？", "answer": "後置記法"}, {"subject": "C言語", "number": 24, "question": "辞書とは？", "answer": "挿入、探索、削除の３つの操作をもつ抽象データ型"}, {"subject": "C言語", "number": 25, "question": "ハッシュ法とは", "answer": "データの個数によらず挿入、探索、削除の操作を実質的にO(1)で行うことが出来、キーの値をデータが格納される位置に直接関連付けてしまうというアルゴリズム。"}, {"subject": "C言語", "number": 26, "question": "ハッシュ法においてデータを格納する配列、その配列の各要素を何という？", "answer": "格納する配列をハッシュ法、ハッシュ法の各要素をバケットという"}, {"subject": "C言語", "number": 27, "question": "チェイン法は十分なバケットがあるとき、探索、挿入、削除の計算量はいくつになる？", "answer": "O(1)"}, {"subject": "C言語", "number": 28, "question": "二分探索木から要素を削除する場合の手順を説明せよ", "answer": "子を持たない要素はそのまま削除、子を一つ持つ要素はその子を今の場所に移動する、子を二つ持つ場合は、右部分木の最小の要素または左部分木の最大の要素で置き換える"}, {"subject": "C言語", "number": 29, "question": "根からすべての葉までの経路の長さが等しいような二分木をなんという？", "answer": "完全ニ分木"}, {"subject": "C言語", "number": 30, "question": "二分木の探索において最悪の計算量は？またそうなるとき二分木の構造はどうなっている？", "answer": "O(n)、子がすべて右または左の子になっている"}, {"subject": "C言語", "number": 31, "question": "AVL木の制約を答えよ", "answer": "すべての節において、左部分木と右部分木の高さの差が１以内に収まらなければならない"}, {"subject": "C言語", "number": 32, "question": "AVL木の探索、挿入、削除の計算量は？", "answer": "O(logn)"}, {"subject": "C言語", "number": 33, "question": "AVL木の操作をP.150~155にて確認せよ", "answer": "(言語化できなかった)"}, {"subject": "C言語", "number": 34, "question": "m分木とは？", "answer": "節が最大m個(m>=2)の子を持つことができる木構造"}, {"subject": "C言語", "number": 35, "question": "m階のB木が満たす条件を答えよ", "answer": "根は葉であるか、2~m個の子を持っている、根・葉以外の節はm/2(切り上げ)~m個の子を持つ、根からすべての葉までの経路の長さが等しい"}, {"subject": "C言語", "number": 36, "question": "B木の最良、最悪のケースにおける高さは？", "answer": "最良のケースでlog(m)n、最悪のケースでlog[m/2]n 。全ての節が[m/2]個しか子を持っていないのが最悪のケース、全ての節がm個の子を持っているのが最良のケースとなる。"}, {"subject": "C言語", "number": 37, "question": "B木の探索、挿入、削除の計算量は？", "answer": "O(logn)"}, {"subject": "C言語", "number": 38, "question": "B*木はB木の条件をどう変更したデータ構造？", "answer": "子の数が2m/3(切り上げ)~m個以下である"}, {"subject": "C言語", "number": 39, "question": "内部整列とは何か", "answer": "主記憶上で整列を行うアルゴリズム"}, {"subject": "C言語", "number": 40, "question": "外部整列とは何か", "answer": "外部記憶上で整列を行うアルゴリズム"}, {"subject": "C言語", "number": 41, "question": "バブルソートの計算量は？", "answer": "O(n^2)"}, {"subject": "C言語", "number": 42, "question": "選択ソートの計算量は？", "answer": "O(n^2)"}, {"subject": "C言語", "number": 43, "question": "挿入ソートの計算量は？", "answer": "O(n^2)"}, {"subject": "C言語", "number": 44, "question": "シェルソートの計算量は？", "answer": "O(n^1.5) (h_n=2^n-1のとき)、O(n^1.25) (h_n=3h_(n-1)+1)"}, {"subject": "C言語", "number": 45, "question": "ヒープソートのヒープとは何か", "answer": "配列によって二分木を表現するデータ構造"}, {"subject": "C言語", "number": 46, "question": "バブルソートは安定か？", "answer": "安定"}, {"subject": "C言語", "number": 47, "question": "選択ソートは安定か？", "answer": "不安定"}, {"subject": "C言語", "number": 48, "question": "挿入ソートは安定か？", "answer": "安定"}, {"subject": "C言語", "number": 49, "question": "シェルソートは順にh-ソートを行うが、このhの数列はどういう数列が良い計算量となる？", "answer": "数列に現れる値は、互いに倍数になっていない"}, {"subject": "C言語", "number": 50, "question": "シェルソートは安定か？また、なぜ？", "answer": "不安定、hソートで離れた要素を整列する際に位置関係が失われるから"}, {"subject": "C言語", "number": 51, "question": "クイックソートの時間、空間計算量は？また、その理由は？", "answer": "分割位置が真ん中にくると考えると再帰構造の深さはO(log n)、よって空間計算量O(log n) 各呼び出しで関数内でn回ループするので1回あたりO(n)、よって時間計算量はO(n log n)"}, {"subject": "C言語", "number": 52, "question": "クイックソートは安定か？", "answer": "不安定"}, {"subject": "C言語", "number": 53, "question": "クイックソートの最悪の計算量を避けるためには？", "answer": "例えば配列の左端、中央、右端の中央値をピボットにする"}, {"subject": "C言語", "number": 54, "question": "マージソートの計算量は？また、その理由は？", "answer": "マージするのにO(n)、分割にO(logn)かかるからO(nlogn)"}, {"subject": "C言語", "number": 55, "question": "マージソートは安定か？", "answer": "安定"}, {"subject": "C言語", "number": 56, "question": "連結リストマージソートの、利点、欠点は？", "answer": "余分な作業領域を使わないが、ランダムアクセスができないため、中央の要素は先頭から数え上げて判定するしかない"}, {"subject": "C言語", "number": 57, "question": "ビンソートの前提条件はなにか", "answer": "キーの重複がない、キーの値がある範囲に収まる整数でなければならない"}, {"subject": "C言語", "number": 58, "question": "分布数え上げソートの前提条件はなにか", "answer": "キーの値がある範囲に収まる整数でなければならない"}, {"subject": "C言語", "number": 59, "question": "力任せのアルゴリズムの平均計算量、最悪計算量は？", "answer": "O(n),O(nm)"}, {"subject": "C言語", "number": 60, "question": "BM法の平均計算量、最悪計算量は？", "answer": "O(n/m),O(n)"}, {"subject": "C言語", "number": 61, "question": "シェルソートと挿入ソートの違いについて説明せよ", "answer": "挿入ソートは隣り合った要素の交換を繰り返す。それに対しシェルソートは遠く離れた要素同士からだんだん近い要素同士を交換し、最終的に隣り合った要素を交換する"}, {"subject": "C言語", "number": 62, "question": "ハッシュ関数を作成する際に気をつけねばならないことは？", "answer": "ハッシュ値が均等に生成されるようにする"}, {"subject": "C言語", "number": 63, "question": "メモリの動的に管理するためのC言語の関数は？", "answer": "メモリを割り当てるmalloc関数と、解放するfree関数"}, {"subject": "C言語", "number": 64, "question": "mallocはなんというメモリ領域に確保する？", "answer": "ヒープ領域"}, {"subject": "C言語", "number": 65, "question": "なんでmallocでメモリ確保したときにNULLチェックをするの？", "answer": "メモリ保護が不十分なOSではシステム領域を書き換えてしまい、その結果暴走する可能性が高いから。"}, {"subject": "C言語", "number": 66, "question": "選択ソートと比較したときの挿入ソートの欠点は？", "answer": "交換の回数が多いため、変数のメモリサイズが大きいと書き換えのコストが大きくかかる"}, {"subject": "C言語", "number": 67, "question": "領域に関するB木の欠点は？", "answer": "子の数が最小でm/2個なので最悪の場合には、記憶領域の約半分が無駄になる"}, {"subject": "C言語", "number": 68, "question": "プログラムの実行開始から実行終了まで存在する変数の種類は？", "answer": "extern変数とstatic変数"}, {"subject": "C言語", "number": 69, "question": "関数の実行が始まる時から、その関数が終わるまで存在するものは？", "answer": "auto変数とregister変数"}, {"subject": "C言語", "number": 70, "question": "static変数とauto変数の違いは？", "answer": "メモリの確保される場所が違う。static変数は静的領域にメモリが確保されて変数が生き続けるが、auto変数はスタック領域に確保されるため、変数は都度解放される"}, {"subject": "C言語", "number": 71, "question": "ビンソートがO(n)となるための前提条件は何か", "answer": "整列対象のデータの数と、整列用の配列の要素数が十分近い値でなければならない"}, {"subject": "C言語", "number": 72, "question": "チェイン法の時間計算量をO(1)にするために必要な前提条件は何か", "answer": "格納するデータの数に対しバケットの数が十分に大きくなければならない"}, {"subject": "C言語", "number": 73, "question": "連結リストにおいて挿入時に生じる制約は何か(双方向リストにすることにより解消するものとする)", "answer": "指定した要素の後ろにしか挿入できない"}, {"subject": "C言語", "number": 74, "question": "連結リストにおいて削除時に生じる制約は何か(双方向リストにすることにより解消するものとする)", "answer": "指定した要素自体を削除することはできず、指定した要素の後ろのものしか削除できない"}, {"subject": "C言語", "number": 75, "question": "分割等置法とは?", "answer": "全体をいくつかの小問題に分割して、その一つ一つを各個撃破するという手法"}, {"subject": "C言語", "number": 76, "question": "動的計画法の考え方とは?", "answer": "本当か必要かどうか考えずに、いずれ必要になりそうな小問題全てを解いてテーブルに入れておく"}, {"subject": "C言語", "number": 77, "question": "ナップザック問題とは？", "answer": "N種類の品物があり、それぞれの大きさと価値が決まっているとき、大きさの合計がM以下で、価値の合計が最大になる様な品物の組み合わせを求める"}, {"subject": "C言語", "number": 78, "question": "比較によらない整列には何がある？", "answer": "ビンソート、分布数え上げソート、奇数ソート"}, {"subject": "C言語", "number": 79, "question": "比較による整列とは？", "answer": "キーの大小を比較して、その結果によってレコードの交換を行うアルゴリズム。"}, {"subject": "C言語", "number": 80, "question": "比較によらない整列とは？", "answer": "キーの特別な性質を利用したアルゴリズム(常に利用できるという訳ではない)"}, {"subject": "C言語", "number": 81, "question": "比較による整列の最も高速なアルゴリズムの計算量は？", "answer": "O(n log n)"}, {"subject": "ネットワーク", "number": 1, "question": "1876年、誰が電話機を発明した？", "answer": "アレクサンダーグラハムベル"}, {"subject": "ネットワーク", "number": 2, "question": "1889年、誰が実用的自動交換機の特許を申請した？", "answer": "A.B.ストロージャ"}, {"subject": "ネットワーク", "number": 3, "question": "誰が蓄積プログラム制御(spc)の思想を発表した？", "answer": "フォン・ノイマン"}, {"subject": "ネットワーク", "number": 4, "question": "電話機を直接収容する交換機をなんという？", "answer": "加入者交換機"}, {"subject": "ネットワーク", "number": 5, "question": "加入者交換機同士を結ぶ交換機をなんという？", "answer": "中継交換機"}, {"subject": "ネットワーク", "number": 6, "question": "最初の商用コンピュータの名前は？", "answer": "UNIVAC"}, {"subject": "ネットワーク", "number": 7, "question": "米国国防省が運用した最初のパケット交換ネットワークをなんという？", "answer": "ARPAnet(advanced reseach project agency)"}, {"subject": "ネットワーク", "number": 8, "question": "IBMが初めて世に出した自社のコンピュータ相互接続のためのネットワークアーキテクチャをなんという？", "answer": "SNA(system network architecture)"}, {"subject": "ネットワーク", "number": 9, "question": "1979年、NTTが開始した通信サービスをなんという？", "answer": "DDXディジタル回線交換サービス、翌年にはDDXディジタルパケット交換サービスが開始された"}, {"subject": "ネットワーク", "number": 10, "question": "サービスを受けようとするとき相手までの回線又は交換機がすべて接続中となりふさがっているとサービスが受けられない系", "answer": "即時式"}, {"subject": "ネットワーク", "number": 11, "question": "即時式に対し、ふさがっている場合には空くまで待つ系", "answer": "待時式"}, {"subject": "ネットワーク", "number": 12, "question": "パケット交換はなんという交換の一種であるか", "answer": "蓄積交換"}, {"subject": "ネットワーク", "number": 13, "question": "回線交換ではいったん接続されると接続速度が一定であることが保証されるがこれをなんていう？", "answer": "ギャランティ型"}, {"subject": "ネットワーク", "number": 14, "question": "パケット交換では常にできる限りの通信速度を要求するが、これをなんという？", "answer": "ベスト・エフォート型"}, {"subject": "ネットワーク", "number": 15, "question": "1981年にマルチメディア通信サービスの研究を開始した、ITUの常設機関の一つ、現在のITU-T", "answer": "CCITT"}, {"subject": "ネットワーク", "number": 16, "question": "企業が自社の企業活動のためだけに構築し保有するネットワークは何か", "answer": "プライベートネットワーク"}, {"subject": "ネットワーク", "number": 17, "question": "1980年、音声、データ、画像などの通信を統合して提供するマルチメディア通信サービスが期待された、このネットワークは何と名付けられた？", "answer": "サービス総合ディジタルネットワーク(ISDN:integrated service digital network)"}, {"subject": "ネットワーク", "number": 18, "question": "高速ファイル転送や高精細映像伝送を実現しようとしたISDN", "answer": "広帯域ISDN"}, {"subject": "ネットワーク", "number": 19, "question": "高周波数帯を使用することで高速なデータ通信を実現した、安価なアクセス回線。ノイズや外部からの干渉を受けやすい", "answer": "ADSL"}, {"subject": "ネットワーク", "number": 20, "question": "ATM交換では、送受信するデータの塊のことをなんという？", "answer": "セル"}, {"subject": "ネットワーク", "number": 21, "question": "ATM交換におけるセルは何バイトの固定長か", "answer": "53バイト(うち5バイトはヘッダー)"}, {"subject": "ネットワーク", "number": 22, "question": "ATM交換は何により経路を切り替える？", "answer": "ハードウェア"}, {"subject": "ネットワーク", "number": 23, "question": "ATMの正式名は？", "answer": "非同期転送モード(asynchronous transfer mode)"}, {"subject": "ネットワーク", "number": 24, "question": "NGN(次世代ネットワーク)の階層構造の区分けに、なんという用語が使われている？", "answer": "ストラテム"}, {"subject": "ネットワーク", "number": 25, "question": "個々の端末や個々のネットワークは接続されるネットワークとは独立し、自律的に運用されるという考え。LANとTCP/IPの設計思想", "answer": "分散制御方式"}, {"subject": "ネットワーク", "number": 26, "question": "ネットワークを集中制御・管理・運用する方式の一つで、2010年代から注目されるようになったネットワーク。OpenFlow1.0はこれの実装形態である。", "answer": "SDN"}, {"subject": "ネットワーク", "number": 27, "question": "アナログ信号を一定周期ごとに読み出すこと", "answer": "標本化"}, {"subject": "ネットワーク", "number": 28, "question": "パルス振幅を信号により変調すること", "answer": "パルス振幅変調"}, {"subject": "ネットワーク", "number": 29, "question": "振幅を離散的な値に変換すること", "answer": "量子化"}, {"subject": "ネットワーク", "number": 30, "question": "離散振幅を2進符号列に変換すること", "answer": "符号化"}, {"subject": "ネットワーク", "number": 31, "question": "信号をビット数と同じ数の伝送路を用意し伝送すること。伝送距離が長い場合には経済的でない", "answer": "並列伝送"}, {"subject": "ネットワーク", "number": 32, "question": "信号を１ビットずつ一本の伝送路で伝送すること", "answer": "直列伝送"}, {"subject": "ネットワーク", "number": 33, "question": "信号が片側から流れているときには逆方向に流せない伝送方式", "answer": "半二重伝送"}, {"subject": "ネットワーク", "number": 34, "question": "0,1のディジタル信号をそのままのパルス波形で伝送する方式をなんという？", "answer": "ベースバンド方式"}, {"subject": "ネットワーク", "number": 35, "question": "RZ方式の利点と欠点は？", "answer": "ビット同期信号の抽出が容易だが、帯域特性の良い伝送媒体を必要とする"}, {"subject": "ネットワーク", "number": 36, "question": "バイポーラ方式の利点は？", "answer": "長距離伝送に有利"}, {"subject": "ネットワーク", "number": 37, "question": "マンチェスタ符号方式の利点は？", "answer": "ビット識別のビット同期信号の抽出が容易"}, {"subject": "ネットワーク", "number": 38, "question": "振幅変調方式の利点は？", "answer": "安価な回路で実現できる"}, {"subject": "ネットワーク", "number": 39, "question": "周波数変調方式の利点は？", "answer": "振幅のレベル変動に強く雑音の影響を受けにくい"}, {"subject": "ネットワーク", "number": 40, "question": "位相変調方式の利点は？", "answer": "周波数に対するビット伝送量が大きい"}, {"subject": "ネットワーク", "number": 41, "question": "あと一つの変調方式は？", "answer": "振幅位相変調方式"}, {"subject": "ネットワーク", "number": 42, "question": "各ビットの位置を認識して読み取りタイミングを得ることをなんという？", "answer": "ビット同期"}, {"subject": "ネットワーク", "number": 43, "question": "1半角文字(キャラクタ)の符号列で先頭位置を知ることをなんという？", "answer": "キャラクタ同期"}, {"subject": "ネットワーク", "number": 44, "question": "1フレームを形成するビット列の先頭位置を知ることをなんという？", "answer": "フレーム同期"}, {"subject": "ネットワーク", "number": 45, "question": "符号送信していないときは同期をとらない方式を何というか？", "answer": "非同期伝送"}, {"subject": "ネットワーク", "number": 46, "question": "１キャラクタを送るごとにスタートビットとストップビットをつけてビット同期とキャラクタ同期をとる方法を何というか", "answer": "調歩同期"}, {"subject": "ネットワーク", "number": 47, "question": "二本の導体を同じ物理構造として対称形に配置し、信号電磁解を二本の導体間で点対称にするように伝送する方式をなんというか", "answer": "平衡伝送"}, {"subject": "ネットワーク", "number": 48, "question": "漏話を抑えるために対戦ごとに電磁シールドが施されているケーブルをなんという？", "answer": "シールド付きより対線(STP)"}, {"subject": "ネットワーク", "number": 49, "question": "シールドを持たない電磁界的に開放なケーブルをなんという？", "answer": "非シールドより対線(UTP)"}, {"subject": "ネットワーク", "number": 50, "question": "光ファイバは屈折率の大きい円柱型の○○、それをおおい屈折率がそれよりも低い円筒形の○○よりなる単純な構造である．〇に入る言葉は？", "answer": "コア、クラッド"}, {"subject": "ネットワーク", "number": 51, "question": "多モード光ファイバには、屈折率分布形状が階段状のものがあるが、これを何形光ファイバという？", "answer": "ステップインデックス(SI)形光ファイバ、光パルスの広がりがおおきいため、低速伝送でしか利用できない"}, {"subject": "ネットワーク", "number": 52, "question": "SI型の特徴は？", "answer": "光パルスの広がりが大きくなる、広帯域で接続が容易"}, {"subject": "ネットワーク", "number": 53, "question": "多モード光ファイバには、屈折率分布形状がコア中心から放物線上になだらかにクラッドに達するものがあるが、これを何形光ファイバという？", "answer": "グレーデッドインデックス(GI)形光ファイバ、SI形光ファイバを改良したもので、広帯域な特性が実現される"}, {"subject": "ネットワーク", "number": 54, "question": "GI型の特徴は？", "answer": "伝搬時間差が抑えられる、超広帯域で低損失"}, {"subject": "ネットワーク", "number": 55, "question": "単一モード光ファイバの特徴は？", "answer": "長距離でも安定した大容量通信が可能だが、接続が難しい"}, {"subject": "ネットワーク", "number": 56, "question": "ネットワークの基本構造、構造を形成するための考え方、階層化構造の枠組みなどを総称してなんという？", "answer": "ネットワークアーキテクチャ"}, {"subject": "ネットワーク", "number": 57, "question": "ネットワークトポロジーを構成する3つの要素は？", "answer": "端末(ステーション)、交換機(ノード)、伝送路(リンク)"}, {"subject": "ネットワーク", "number": 58, "question": "スター形の長所と短所は？", "answer": "伝送路切断事故が起きてもネットワーク全体に影響を及ぼさないが、中央ノードに故障があるとネットワーク全体が停止する"}, {"subject": "ネットワーク", "number": 59, "question": "リング形の長所と短所は？", "answer": "伝送路長が短く経済的で高速伝送が可能だが、ノードの追加、伝送路故障時にはネットワーク全体が停止する"}, {"subject": "ネットワーク", "number": 60, "question": "バス形の長所と短所は？", "answer": "端末の追加と削除が容易だが、すべての信号が同じ伝送路を通るためセキュリティに弱い"}, {"subject": "ネットワーク", "number": 61, "question": "メッシュ形の長所と短所は？", "answer": "目的ノードの経路が複数存在するため、故障時などの切替ルートが多いが、設備コストがかかる"}, {"subject": "ネットワーク", "number": 62, "question": "ツリー形の長所と短所は？", "answer": "端末の追加と削除が容易で大規模なネットワークが構築しやすいが、伝送路での輻輳が生じやすい、端末どうしの通信は制約が多い"}, {"subject": "ネットワーク", "number": 63, "question": "端末とネットワークの接続点をなんという？", "answer": "ユーザ - 網インターフェイス(UNI)"}, {"subject": "ネットワーク", "number": 64, "question": "端末は分界点を通してネットワークからのサービスを受ける、これをなんと呼ぶ？", "answer": "ネットワークサービス"}, {"subject": "ネットワーク", "number": 65, "question": "ネットワーク同士の接続点をなんという？", "answer": "網ノードインターフェイス(NNI)"}, {"subject": "ネットワーク", "number": 66, "question": "端末がネットワークからサービスを受ける際の一連の約束事をなんという？", "answer": "通信規約(プロトコル)"}, {"subject": "ネットワーク", "number": 67, "question": "OSIの正式名称は？", "answer": "開放型システム間相互接続の基本参照モデル(open systems inter-connection-basic reference model)"}, {"subject": "ネットワーク", "number": 68, "question": "同じ階層にある同位エンティティ同士が直接通信できるように経路を形成することをなんという？", "answer": "コネクションを設定する"}, {"subject": "ネットワーク", "number": 69, "question": "コネクションの設定における手順は？", "answer": "要求、指示、応答、確認"}, {"subject": "ネットワーク", "number": 70, "question": "通信に先立ってコネクションを設定し、通信環境を整えるやり方をなんというか", "answer": "コネクション指向形"}, {"subject": "ネットワーク", "number": 71, "question": "受信側からの応答を確認しないで情報を転送するやり方をなんというか", "answer": "コネクションレス形"}, {"subject": "ネットワーク", "number": 72, "question": "OSIの第1層は？", "answer": "物理層"}, {"subject": "ネットワーク", "number": 73, "question": "OSIの第2層は？", "answer": "データリンク層"}, {"subject": "ネットワーク", "number": 74, "question": "OSIの第3層は？", "answer": "ネットワーク層"}, {"subject": "ネットワーク", "number": 75, "question": "OSIの第4層は？", "answer": "トランスポート層"}, {"subject": "ネットワーク", "number": 76, "question": "OSIの第5層は？", "answer": "セッション層"}, {"subject": "ネットワーク", "number": 77, "question": "OSIの第6層は？", "answer": "プレゼンテーション層"}, {"subject": "ネットワーク", "number": 78, "question": "OSIの第7層は？", "answer": "応用層"}, {"subject": "ネットワーク", "number": 79, "question": "OSIのうち、データ伝送の制御に関するプロトコルは第何層から第何層か？", "answer": "第１層から第４層"}, {"subject": "ネットワーク", "number": 80, "question": "TCP/IPの第1層は？", "answer": "ネットワークインターフェイス層"}, {"subject": "ネットワーク", "number": 81, "question": "TCP/IPの第2層は？", "answer": "インターネット層"}, {"subject": "ネットワーク", "number": 82, "question": "TCP/IPの第3層は？", "answer": "トランスポート層"}, {"subject": "ネットワーク", "number": 83, "question": "TCP/IPの第4層は？", "answer": "アプリケーション層"}, {"subject": "ネットワーク", "number": 84, "question": "TCP/IPの第4層のアプリケーション層のプロトコルを5つあげよ", "answer": "SMTP、HTTP、DNS、DHCP、SIP"}, {"subject": "ネットワーク", "number": 85, "question": "TCP/IPのうちアプリケーション層に対応するOSI参照モデルの層は？", "answer": "セッション層、プレゼンテーション層、応用層"}, {"subject": "ネットワーク", "number": 86, "question": "TCP/IPのうちネットワークインターフェイス層に対応するOSI参照モデルの層は？", "answer": "物理層、データリンク層"}, {"subject": "ネットワーク", "number": 87, "question": "国際標準を審議する機関には、情報技術を扱う○○、電気通信技術を扱う○○がある、〇に入る言葉は？", "answer": "ISO、ITU-T"}, {"subject": "ネットワーク", "number": 88, "question": "日本国内標準化機関を二つあげよ", "answer": "JIS、TTC"}, {"subject": "ネットワーク", "number": 89, "question": "LANの正式英語名称は？", "answer": "local area network"}, {"subject": "ネットワーク", "number": 90, "question": "LAN技術はOSI参照モデルの第何層と第何層に対応する？", "answer": "1層の物理層、2層のデータリンク層"}, {"subject": "ネットワーク", "number": 91, "question": "LAN技術の源流はハワイ大学で開発されたシステムである、このシステムの名前は？", "answer": "ALOHA(additive links online Hawaii area)"}, {"subject": "ネットワーク", "number": 92, "question": "CSMA/CDの正式名称は？", "answer": "衝突検出付き搬送波検知多重アクセス(carrier sense multiple access with collision detection)"}, {"subject": "ネットワーク", "number": 93, "question": "信号波形をケーブルなどの伝送媒体に送信し、宛先端末まで無事に届ける制御方式のことをなんという？", "answer": "媒体アクセス制御(MAC)方式"}, {"subject": "ネットワーク", "number": 94, "question": "衝突を検出できる区間をなんという？", "answer": "コリジョンドメイン"}, {"subject": "ネットワーク", "number": 95, "question": "衝突を知らせる信号を何というか", "answer": "ジャム信号"}, {"subject": "ネットワーク", "number": 96, "question": "衝突してから待つ時間を何というか", "answer": "バックオフ時間"}, {"subject": "ネットワーク", "number": 97, "question": "CSMA/CDの信号形式は何か？", "answer": "マンチェスタ符号方式"}, {"subject": "ネットワーク", "number": 98, "question": "データリンク層でのビットの塊を何というか？", "answer": "フレーム"}, {"subject": "ネットワーク", "number": 99, "question": "フレーム構成内容を先頭から終端まで答えよ", "answer": "プレアンブル、開始デリミナ、宛先アドレス、発信元アドレス、長さ/タイプ、データ、フレーム操作シーケンス"}, {"subject": "ネットワーク", "number": 100, "question": "宛先アドレスと発信元アドレスのことを何と呼ぶか？", "answer": "MACアドレス"}, {"subject": "ネットワーク", "number": 101, "question": "48ビットすべて\"1\"のアドレスを何というか？", "answer": "ブロードキャストアドレス"}, {"subject": "ネットワーク", "number": 102, "question": "フレームの大きさは最小何バイト、最大何バイトか？", "answer": "最小64バイト、最大1518バイト"}, {"subject": "ネットワーク", "number": 103, "question": "トークンリング方式を用いたLANを二つあげよ", "answer": "IEEE 802.5、FDDI"}, {"subject": "ネットワーク", "number": 104, "question": "IEEE 802.5(token ring)に用いるケーブルは？", "answer": "STPケーブル、一部にはUTP"}, {"subject": "ネットワーク", "number": 105, "question": "FDDIに用いるケーブルは？", "answer": "多モード光ファイバ"}, {"subject": "ネットワーク", "number": 106, "question": "無線LANはIEEE 802.〇〇？", "answer": "IEEE 802.11"}, {"subject": "ネットワーク", "number": 107, "question": "無線端末同士が直接通信するやり方を何という？", "answer": "インディペンダント方式"}, {"subject": "ネットワーク", "number": 108, "question": "無線lanにおいて通信できる端末の集合のことをなんという？", "answer": "基本サービスセット、アドホックネットワーク"}, {"subject": "ネットワーク", "number": 109, "question": "端末が個別に対等な通信をする、この通信をなんという？", "answer": "ピア・ツー・ピア通信"}, {"subject": "ネットワーク", "number": 110, "question": "アクセスポイントを通して通信する方式をなんという？", "answer": "インフラストラクチャ方式"}, {"subject": "ネットワーク", "number": 111, "question": "インフラストラクチャ方式においてアクセスポイントは○○領域をカバーする", "answer": "基本サービス"}, {"subject": "ネットワーク", "number": 112, "question": "無線LANが利用する2.4Ghz帯の帯域はなんと呼ばれる？", "answer": "ISM(industrial,scientfic,and medical)帯"}, {"subject": "ネットワーク", "number": 113, "question": "初期の無線LAN(IEEE 802.11)の周波数拡散方式を二個あげよ", "answer": "直接スペクトラム拡散方式(DSSS)、周波数ホッピングスぺクトラム方式(FHSS)"}, {"subject": "ネットワーク", "number": 114, "question": "隣り合う搬送波を直交させて搬送波の密度を上げて通信速度を向上させた方式は何か", "answer": "直交周波数分割多重方式(OFDM)"}, {"subject": "ネットワーク", "number": 115, "question": "光ファイバ並の高速通信を実現するために開発された無線LANの規格は何か", "answer": "802.11n"}, {"subject": "ネットワーク", "number": 116, "question": "送信データを複数の信号ストリームに分割した後、各ストリームを別々のアンテナで送信する空間分割多重伝送法の一種、これはなにか", "answer": "MIMO(multiple input-multiple output:多元接続)技術"}, {"subject": "ネットワーク", "number": 117, "question": "無線LANのアクセス制御方式は何か", "answer": "衝突回避付き搬送波検知多重アクセス方式(CSMA/CA:carrier sense multiple access with collison avoidance)"}, {"subject": "ネットワーク", "number": 118, "question": "無線LANにおいて隠れ端末との衝突を回避する方式をなんという？", "answer": "RTS/CTS方式"}, {"subject": "ネットワーク", "number": 119, "question": "集線装置を中心にしたスター上の配線のことを何というか", "answer": "ハブ"}, {"subject": "ネットワーク", "number": 120, "question": "ハブによるイーサネットフレーム転送方法のうち、データをすべての端末にいったん送信する、物理層の機能しか持たないハブは？", "answer": "リピータ接続"}, {"subject": "ネットワーク", "number": 121, "question": "ハブによるイーサネットフレーム転送方法のうち、データをMACアドレスをもとに判別し、送信先の端末にだけデータを送信するハブは？", "answer": "ブリッジ接続"}, {"subject": "ネットワーク", "number": 122, "question": "10Mbpsイーサネットの方式を三つあげよ", "answer": "10BASE5、10BASE2、10BASE-T"}, {"subject": "ネットワーク", "number": 123, "question": "10BASE5のケーブルと最大長は何か", "answer": "同軸ケーブル、500m"}, {"subject": "ネットワーク", "number": 124, "question": "10BASE2のケーブルと最大長は何か", "answer": "同軸ケーブル、185m"}, {"subject": "ネットワーク", "number": 125, "question": "10BASE-Tのケーブルは何か", "answer": "UTPケーブル"}, {"subject": "ネットワーク", "number": 126, "question": "ブリッジを接続ポートに利用して、宛先アドレスを確認し、転送ポートに向けてフレームを高速にスイッチングする方式をなんというか(全二重伝送である)", "answer": "スイッチングハブ"}, {"subject": "ネットワーク", "number": 127, "question": "ブリッジ接続は受信フレームをメモリに蓄え、誤り検出を行い、宛先アドレスを確認して目的ポートに送信することから○○方式ともいわれる", "answer": "ストア・アンド・フォワード方式"}, {"subject": "ネットワーク", "number": 128, "question": "100Mbpsイーサネットは10Mbpsイーサネットと区別して何と呼ばれた？", "answer": "ファストイーサネット"}, {"subject": "ネットワーク", "number": 129, "question": "100Mbpsイーサネットの方式を二つあげよ", "answer": "100BASE-TX、100BASE-FX"}, {"subject": "ネットワーク", "number": 130, "question": "100BASE-TXのケーブルと最大長は何か", "answer": "UTPケーブル、100m"}, {"subject": "ネットワーク", "number": 131, "question": "100BASE-FXのケーブルと最大長は何か", "answer": "多モード光ファイバ、2km"}, {"subject": "ネットワーク", "number": 132, "question": "100BASE-TXの信号符号化形式は何か", "answer": "MLT-3"}, {"subject": "ネットワーク", "number": 133, "question": "100BASE-FXの信号符号化形式は何か", "answer": "NRZI"}, {"subject": "ネットワーク", "number": 134, "question": "相手端末によって、10Mbpsか100Mbps、半二重か全二重かを自動で切り替えることをなんという？", "answer": "オートネゴシエーション"}, {"subject": "ネットワーク", "number": 135, "question": "1000Mbpsイーサネットの主な方式を三つあげよ", "answer": "1000 BASE-T、1000BASE-SX、1000BASE-LX"}, {"subject": "ネットワーク", "number": 136, "question": "1000BASE-Tのケーブルと最大長は何か", "answer": "UTPケーブル、100m"}, {"subject": "ネットワーク", "number": 137, "question": "1000BASE-SXのケーブルと最大長は何か", "answer": "多モード光ファイバ、275m(コア径62.5μm)、550m(コア径50μm)"}, {"subject": "ネットワーク", "number": 138, "question": "1000BASE-LXのケーブルと最大長は何か", "answer": "多モード光ファイバで550m、単一モード光ファイバで5km"}, {"subject": "ネットワーク", "number": 139, "question": "1000BASE-Tの信号符号化方式は何か", "answer": "4D-PAM5"}, {"subject": "ネットワーク", "number": 140, "question": "1000BASE-SX、1000BASE-LXの信号符号化方式は何か", "answer": "NRZI"}, {"subject": "ネットワーク", "number": 141, "question": "WAN PHYとは光ファイバ伝送方式相互接続での国際標準である○○と北米標準である○○との相互接続を可能とする方式である", "answer": "SDH、SONET"}, {"subject": "ネットワーク", "number": 142, "question": "スイッチングハブによりネットワークを分離する技術をなんというか", "answer": "バーチャルLAN"}, {"subject": "ネットワーク", "number": 143, "question": "1台のハブにおいてポート別にVLANを形成することを何VLANというか", "answer": "ポートベースVLAN"}, {"subject": "ネットワーク", "number": 144, "question": "VLANにおいて、タグ付きMACフレームはなんと呼ばれるか", "answer": "VLANタグまたは802.1Qタグ"}, {"subject": "ネットワーク", "number": 145, "question": "複数のスイッチングハブを用いてネットワークを構成するとループを形成することがあるが、フレームがループをするのを防ぐプロトコルをなんというか", "answer": "スパニング・ツリー・プロトコル"}, {"subject": "ネットワーク", "number": 146, "question": "根幹となるスイッチングハブをなんというか", "answer": "ルートブリッジ"}, {"subject": "ネットワーク", "number": 147, "question": "電話配線においてフロア全面にあらかじめ電話ローゼットを碁盤の目のように配置する方法を何というか？", "answer": "先行配線"}, {"subject": "ネットワーク", "number": 148, "question": "機器を接続するためのコンセントのことを何というか、また、一般には何と呼ばれるか？", "answer": "通信アウトレット、一般には情報コンセント"}, {"subject": "ネットワーク", "number": 149, "question": "ビル内の階層構造のスター配線をなんという？", "answer": "構造化配線システム"}, {"subject": "ネットワーク", "number": 150, "question": "データリンク層でLAN接続する機器のことを何というか", "answer": "ブリッジ"}, {"subject": "ネットワーク", "number": 151, "question": "インターネット層でLAN接続する機器のことを何というか", "answer": "ルータ"}, {"subject": "ネットワーク", "number": 152, "question": "IPにおいて通信処理をする端末を何というか？", "answer": "ホスト"}, {"subject": "ネットワーク", "number": 153, "question": "下位層で渡されたデータ全てをデータとして扱い、そのデータにヘッダを付与する．これを○○と呼ぶ", "answer": "カプセル化"}, {"subject": "ネットワーク", "number": 154, "question": "TCPがIPにわたすデータ単位を○○、IPがイーサネットに渡す単位を○○とよぶ", "answer": "TCPセグメント、IPデータグラム"}, {"subject": "ネットワーク", "number": 155, "question": "IPデータグラムのヘッダ部は何バイトか", "answer": "20バイト"}, {"subject": "ネットワーク", "number": 156, "question": "IPヘッダにおける送信元アドレスは何ビットか", "answer": "32ビット"}, {"subject": "ネットワーク", "number": 157, "question": "IPヘッダにおける宛先アドレスは何ビットか", "answer": "32ビット"}, {"subject": "ネットワーク", "number": 158, "question": "IPデータグラムは最大何バイト長まで許されるか", "answer": "65535バイト"}, {"subject": "ネットワーク", "number": 159, "question": "IPデータグラムの最小データ長は？", "answer": "46バイト"}, {"subject": "ネットワーク", "number": 160, "question": "IPアドレスの管理は○○配下の地域別○○が担当している．日本では○○に属する○○が担当している", "answer": "IANA、NIC、APNIC、JPNIC"}, {"subject": "ネットワーク", "number": 161, "question": "予約されたアドレスで、ホストアドレスがすべて\"0\"は何を示すか", "answer": "ネットワーク自身"}, {"subject": "ネットワーク", "number": 162, "question": "予約されたアドレスで、ホストアドレスがすべて\"1\"は何を示すか", "answer": "ブロードキャストアドレス"}, {"subject": "ネットワーク", "number": 163, "question": "予約されたアドレスで、ネットワークアドレスがすべて\"0\"は何を示すか", "answer": "このネットワークまたはセグメント"}, {"subject": "ネットワーク", "number": 164, "question": "予約されたアドレスで、ネットワークアドレスがすべて\"1\"は何を示すか", "answer": "全ネットワーク"}, {"subject": "ネットワーク", "number": 165, "question": "予約されたアドレスで、127.0.0.0~127.255.255.255は何を示すか", "answer": "自分自身を宛先としたループバック"}, {"subject": "ネットワーク", "number": 166, "question": "予約されたアドレスで、0.0.0.0は何を示すか", "answer": "自分自身のアドレスを認識できないときの発信元アドレス"}, {"subject": "ネットワーク", "number": 167, "question": "予約されたアドレスで、255.255.255.255は何を示すか", "answer": "全ネットワーク上の全ホスト"}, {"subject": "ネットワーク", "number": 168, "question": "サブネット分割でネットワーク部とホスト部の区分けをする方法を二つ挙げよ", "answer": "サブネットマスクを利用する方法、プレフィックス値を付与する方法"}, {"subject": "ネットワーク", "number": 169, "question": "アドレスを任意ビット数のネットワーク部とホスト部に分離した体形で整理することで経路表の軽減を図るルーチング方法を何というか？", "answer": "CIDR"}, {"subject": "ネットワーク", "number": 170, "question": "ルーチングとは何か", "answer": "宛先IPアドレスを見て経路を選択するルータの役割"}, {"subject": "ネットワーク", "number": 171, "question": "ルーチングプロトコルは手動で行う○○と自動的に作成する○○がある", "answer": "スタティックルーチング、ダイナミックルーチング"}, {"subject": "ネットワーク", "number": 172, "question": "ダイナミックルーチングプロトコルの代表的な三つをこたえよ、また使用されているアルゴリズムは？", "answer": "RIP：距離ベクトル形、OSPF：リンク状態形、BGP：パスベクトル形"}, {"subject": "ネットワーク", "number": 173, "question": "OSPFでルータからネットワークの方向にコストが最小となる経路をツリー上に形成したものを何というか", "answer": "最短パス・ツリー"}, {"subject": "ネットワーク", "number": 174, "question": "自律的に大規模なネットワークを運営する組織が保有するネットワークの単位を何というか", "answer": "AS(自律システム)"}, {"subject": "ネットワーク", "number": 175, "question": "IPv6ヘッダにおいて、送信元アドレスは何ビットか", "answer": "128ビット"}, {"subject": "ネットワーク", "number": 176, "question": "IPv6ヘッダにおいて、宛先アドレスは何ビットか", "answer": "128ビット"}, {"subject": "ネットワーク", "number": 177, "question": "IPv6において、一対一の通信を行うためのアドレスは？", "answer": "ユニキャストアドレス"}, {"subject": "ネットワーク", "number": 178, "question": "ユニキャストアドレスで最初のnビットを占めるものは？", "answer": "サブネットプレフィックス"}, {"subject": "ネットワーク", "number": 179, "question": "ユニキャストアドレスで残りの128-nビットを占めるものは？", "answer": "インターフェイスID"}, {"subject": "ネットワーク", "number": 180, "question": "ユニキャストアドレスでホストに割り振られるものは？", "answer": "グローバルユニキャストアドレス"}, {"subject": "ネットワーク", "number": 181, "question": "ユニキャストアドレスで各インターフェイスが最低一つずつ持つアドレスは？", "answer": "リンクローカルユニキャストアドレス"}, {"subject": "ネットワーク", "number": 182, "question": "IPv6において、ネットワークアドレスのビット数は？", "answer": "64ビット"}, {"subject": "ネットワーク", "number": 183, "question": "IPv6において、ホストアドレスのビット数は？", "answer": "64ビット"}, {"subject": "ネットワーク", "number": 184, "question": "IPv6において、サブネットIDのビット数は？", "answer": "16ビット"}, {"subject": "ネットワーク", "number": 185, "question": "IPv6において、ネットワークアドレスの上位48bitのことをなんという？", "answer": "グローバルルーチングプレフィックス"}, {"subject": "ネットワーク", "number": 186, "question": "IPv6において、ネットワークアドレスの先頭3ビットのことをなんという？", "answer": "フォーマットプレフィックス"}, {"subject": "ネットワーク", "number": 187, "question": "IPv6において、ネットワークアドレスの下位16bitのことを何という？", "answer": "サブネットID"}, {"subject": "ネットワーク", "number": 188, "question": "IPv6において、一つのネットワークの中に同じアドレスを持つインターフェイスが複数設定され、そのいずれかと通信を行うためのアドレスは？", "answer": "エニーキャストアドレス"}, {"subject": "ネットワーク", "number": 189, "question": "IPv6において、同じアドレスを持つインターフェイスが複数存在し、そのすべてと通信を行うためのアドレスは？", "answer": "マルチキャストアドレス"}, {"subject": "ネットワーク", "number": 190, "question": "IPv4/IPv6インターネットへの接続形態のうち、IPv4ホストをIPv4インターネットに接続する際にIPv6ネットワークを通して行うものは？", "answer": "トンネル接続"}, {"subject": "ネットワーク", "number": 191, "question": "IPv4/IPv6インターネットへの接続形態のうち、単一機器が両プロトコルに対応して処理できることを何という？", "answer": "デュアルスタック"}, {"subject": "ネットワーク", "number": 192, "question": "IPv4/IPv6インターネットへの接続形態のうち、トランスレータを用いてパケット相互変換を行うものは？", "answer": "IPv4/IPv6相互変換接続"}]</script>
 <script>
 const DATA = JSON.parse(document.getElementById("qa-data").textContent);
+const SUBJECT_ORDER = [...new Set(DATA.map(item => item.subject))];
 const synth = window.speechSynthesis;
 const subjectEl = document.getElementById("subject");
 const voiceEl = document.getElementById("voice");
 const delayEl = document.getElementById("delay");
+const rateEl = document.getElementById("rate");
+const rateValueEl = document.getElementById("rateValue");
 const qEl = document.getElementById("q");
 const aEl = document.getElementById("a");
 const progressEl = document.getElementById("progress");
 const shuffleEl = document.getElementById("shuffle");
 const repeatEl = document.getElementById("repeat");
+const skipLearnedEl = document.getElementById("skipLearned");
+const learnedCurrentEl = document.getElementById("learnedCurrent");
+const learnedInfoEl = document.getElementById("learnedInfo");
+const listSubjectEl = document.getElementById("listSubject");
+const listSearchEl = document.getElementById("listSearch");
+const listSummaryEl = document.getElementById("listSummary");
+const questionListEl = document.getElementById("questionList");
 
 let voices = [];
 let queue = [];
@@ -97,6 +153,232 @@ let idx = 0;
 let stopped = true;
 let timer = null;
 let currentPhase = "";
+let playToken = 0;
+
+const RATE_BASE_MULTIPLIER = 2.0; // 画面上の1.00倍を、以前の2.00倍相当にする
+const LEARNED_STORAGE_KEY = "qaAudioPlayerLearnedV1";
+
+function loadLearnedIds() {
+  try {
+    const raw = localStorage.getItem(LEARNED_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+let learnedIds = new Set(loadLearnedIds());
+
+function saveLearnedIds() {
+  try {
+    localStorage.setItem(LEARNED_STORAGE_KEY, JSON.stringify([...learnedIds]));
+  } catch (e) {
+    // 保存できない環境では、開いている間だけチェックを保持する
+  }
+  updateLearnedInfo();
+  syncQuestionListState();
+}
+
+function itemId(item) {
+  return `${item.subject}::${item.number}`;
+}
+
+function isLearned(item) {
+  return learnedIds.has(itemId(item));
+}
+
+function subjectItems() {
+  const sub = subjectEl.value;
+  return DATA.filter(x => sub === "__ALL__" || x.subject === sub);
+}
+
+function listSubjectItems() {
+  const sub = listSubjectEl?.value || "__ALL__";
+  return DATA.filter(x => sub === "__ALL__" || x.subject === sub);
+}
+
+function updateLearnedInfo() {
+  if (!learnedInfoEl) return;
+  const items = subjectItems();
+  const learnedCount = items.filter(isLearned).length;
+  const remainingCount = items.length - learnedCount;
+  learnedInfoEl.textContent = `覚えた問題：${learnedCount}問 / ${items.length}問（残り${remainingCount}問）`;
+}
+
+function getListKeyword() {
+  return (listSearchEl?.value || "").trim().toLowerCase();
+}
+
+function questionMatchesKeyword(item, keyword) {
+  if (!keyword) return true;
+  const text = `${item.subject} ${item.number} ${item.question} ${item.answer}`.toLowerCase();
+  return text.includes(keyword);
+}
+
+function updateQuestionListSummary() {
+  if (!listSummaryEl) return;
+  const items = listSubjectItems();
+  const keyword = getListKeyword();
+  const shown = items.filter(item => questionMatchesKeyword(item, keyword));
+  const learnedCount = items.filter(isLearned).length;
+  const remainingCount = items.length - learnedCount;
+  const subjectLabel = (listSubjectEl?.value || "__ALL__") === "__ALL__" ? "全科目" : listSubjectEl.value;
+  listSummaryEl.textContent = `${subjectLabel}｜表示中：${shown.length}問 / ${items.length}問｜覚えた：${learnedCount}問｜残り：${remainingCount}問`;
+}
+
+function syncQuestionListState() {
+  if (!questionListEl) return;
+  questionListEl.querySelectorAll(".question-item").forEach(row => {
+    const id = row.dataset.itemId;
+    const checked = learnedIds.has(id);
+    row.classList.toggle("learned", checked);
+    const cb = row.querySelector('input[type="checkbox"]');
+    if (cb) cb.checked = checked;
+  });
+
+  const keyword = getListKeyword();
+  questionListEl.querySelectorAll(".subject-section").forEach(section => {
+    const subject = section.dataset.subject;
+    const items = listSubjectItems().filter(item => item.subject === subject && questionMatchesKeyword(item, keyword));
+    const learnedCount = items.filter(isLearned).length;
+    const remainingCount = items.length - learnedCount;
+    const count = section.querySelector(".subject-count");
+    if (count) count.textContent = `${items.length}問｜覚えた ${learnedCount}｜残り ${remainingCount}`;
+  });
+
+  updateQuestionListSummary();
+}
+
+function createQuestionRow(item) {
+  const id = itemId(item);
+  const row = document.createElement("div");
+  row.className = "question-item";
+  row.dataset.itemId = id;
+  row.classList.toggle("learned", isLearned(item));
+
+  const head = document.createElement("div");
+  head.className = "question-head";
+
+  const meta = document.createElement("div");
+  meta.className = "question-meta";
+  meta.textContent = `${item.subject} ${item.number}`;
+
+  const label = document.createElement("label");
+  label.className = "question-toggle";
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = isLearned(item);
+  cb.addEventListener("change", () => {
+    if (cb.checked) {
+      learnedIds.add(id);
+    } else {
+      learnedIds.delete(id);
+    }
+    saveLearnedIds();
+    if (queue.length > 0 && queue[idx] && itemId(queue[idx]) === id) {
+      setProgress(cb.checked ? "覚えたチェック済み" : "覚えたチェック解除");
+    }
+  });
+  label.appendChild(cb);
+  label.appendChild(document.createTextNode(" 覚えた"));
+
+  head.appendChild(meta);
+  head.appendChild(label);
+
+  const body = document.createElement("div");
+  body.className = "question-body";
+
+  const q = document.createElement("div");
+  q.textContent = `問題：${item.question}`;
+
+  const a = document.createElement("div");
+  a.className = "question-answer";
+  a.textContent = `答え：${item.answer}`;
+
+  body.appendChild(q);
+  body.appendChild(a);
+  row.appendChild(head);
+  row.appendChild(body);
+
+  return row;
+}
+
+function createSubjectSection(subject, items) {
+  const section = document.createElement("div");
+  section.className = "subject-section";
+  section.dataset.subject = subject;
+
+  const learnedCount = items.filter(isLearned).length;
+  const remainingCount = items.length - learnedCount;
+
+  const header = document.createElement("div");
+  header.className = "subject-header";
+
+  const title = document.createElement("div");
+  title.textContent = subject;
+
+  const count = document.createElement("div");
+  count.className = "subject-count";
+  count.textContent = `${items.length}問｜覚えた ${learnedCount}｜残り ${remainingCount}`;
+
+  header.appendChild(title);
+  header.appendChild(count);
+  section.appendChild(header);
+
+  items.forEach(item => section.appendChild(createQuestionRow(item)));
+  return section;
+}
+
+function updateQuestionList() {
+  if (!questionListEl) return;
+  const keyword = getListKeyword();
+  const items = listSubjectItems().filter(item => questionMatchesKeyword(item, keyword));
+  questionListEl.innerHTML = "";
+
+  if (items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "question-item muted";
+    empty.textContent = "表示できる問題がありません。科目や検索条件を変えてください。";
+    questionListEl.appendChild(empty);
+    updateQuestionListSummary();
+    return;
+  }
+
+  const subjectsToShow = SUBJECT_ORDER.filter(subject =>
+    (listSubjectEl?.value || "__ALL__") === "__ALL__" || subject === listSubjectEl.value
+  );
+
+  subjectsToShow.forEach(subject => {
+    const subjectItems = items.filter(item => item.subject === subject);
+    if (subjectItems.length === 0) return;
+    questionListEl.appendChild(createSubjectSection(subject, subjectItems));
+  });
+
+  updateQuestionListSummary();
+}
+function getDisplayedRate() {
+  const value = parseFloat(rateEl.value || "1.00");
+  if (Number.isNaN(value)) return 1.00;
+  return Math.min(2.0, Math.max(0.6, value));
+}
+
+function getSpeechRate() {
+  return getDisplayedRate() * RATE_BASE_MULTIPLIER;
+}
+
+function updateRateValue() {
+  rateValueEl.textContent = `${getDisplayedRate().toFixed(2)}倍`;
+}
+
+function getDelaySeconds() {
+  const value = parseFloat(delayEl.value || "0");
+  if (Number.isNaN(value)) return 0;
+  return Math.min(15, Math.max(0, value));
+}
+
+rateEl.addEventListener("input", updateRateValue);
+updateRateValue();
 
 function loadVoices() {
   voices = synth.getVoices();
@@ -124,12 +406,40 @@ if (speechSynthesis.onvoiceschanged !== undefined) {
 }
 
 function buildQueue() {
-  const sub = subjectEl.value;
-  queue = DATA.filter(x => sub === "__ALL__" || x.subject === sub);
+  queue = subjectItems();
+  if (skipLearnedEl.checked) {
+    queue = queue.filter(x => !isLearned(x));
+  }
   if (shuffleEl.checked) {
     queue = [...queue].sort(() => Math.random() - 0.5);
   }
   idx = 0;
+  updateLearnedInfo();
+}
+
+function nextPlayableIndex(start, delta) {
+  if (queue.length === 0) return -1;
+  let pos = start;
+  let attempts = 0;
+
+  while (attempts < queue.length) {
+    if (pos < 0) {
+      if (repeatEl.checked) pos = queue.length - 1;
+      else return -1;
+    }
+    if (pos >= queue.length) {
+      if (repeatEl.checked) pos = 0;
+      else return -1;
+    }
+
+    if (!skipLearnedEl.checked || !isLearned(queue[pos])) {
+      return pos;
+    }
+
+    pos += delta;
+    attempts++;
+  }
+  return -1;
 }
 
 function speak(text) {
@@ -139,7 +449,7 @@ function speak(text) {
     u.lang = "ja-JP";
     const selected = voices[parseInt(voiceEl.value, 10)];
     if (selected) u.voice = selected;
-    u.rate = 0.95;
+    u.rate = getSpeechRate();
     u.pitch = 1.0;
     u.onend = resolve;
     u.onerror = resolve;
@@ -150,61 +460,144 @@ function speak(text) {
 function setProgress(extra="") {
   if (queue.length === 0) {
     progressEl.textContent = "対象の問題がありません。";
+    qEl.textContent = "---";
+    aEl.textContent = "---";
+    learnedCurrentEl.checked = false;
+    learnedCurrentEl.disabled = true;
+    updateLearnedInfo();
     return;
   }
   const item = queue[idx];
-  progressEl.innerHTML = `<span class="pill">${item.subject}</span> ${idx + 1} / ${queue.length} ${extra}`;
+  learnedCurrentEl.disabled = false;
+  learnedCurrentEl.checked = isLearned(item);
+  const learnedMark = isLearned(item) ? " 覚えた済み" : "";
+  progressEl.innerHTML = `<span class="pill">${item.subject}</span> ${idx + 1} / ${queue.length} ${extra}${learnedMark}`;
   qEl.textContent = item.question;
   aEl.textContent = currentPhase === "answer" ? item.answer : "（考える時間）";
+  updateLearnedInfo();
 }
 
-async function playCurrent() {
-  if (stopped || queue.length === 0) return;
+async function playCurrent(token = playToken) {
+  if (stopped || queue.length === 0 || token !== playToken) return;
   const item = queue[idx];
 
   currentPhase = "question";
   setProgress("問題を再生中");
-  await speak(`第${idx + 1}問。${item.question}`);
-  if (stopped) return;
+  await speak(item.question);
+  if (stopped || token !== playToken) return;
 
   currentPhase = "thinking";
   setProgress("答えまで待機中");
-  const delayMs = Math.max(1, parseInt(delayEl.value || "3", 10)) * 1000;
+  const delayMs = getDelaySeconds() * 1000;
   await new Promise(resolve => {
     timer = setTimeout(resolve, delayMs);
   });
-  if (stopped) return;
+  timer = null;
+  if (stopped || token !== playToken) return;
 
   currentPhase = "answer";
   setProgress("答えを再生中");
   aEl.textContent = item.answer;
-  await speak(`答えは、${item.answer}`);
-  if (stopped) return;
+  await speak(item.answer);
+  if (stopped || token !== playToken) return;
 
-  idx++;
-  if (idx >= queue.length) {
-    if (repeatEl.checked) idx = 0;
-    else {
-      progressEl.textContent = "終了しました。";
-      stopped = true;
-      return;
-    }
+  const nextIdx = nextPlayableIndex(idx + 1, 1);
+  if (nextIdx === -1) {
+    progressEl.textContent = skipLearnedEl.checked ? "終了しました。未チェックの問題はありません。" : "終了しました。";
+    stopped = true;
+    return;
   }
-  playCurrent();
+  idx = nextIdx;
+  playCurrent(token);
 }
+
+function cancelCurrentPlayback() {
+  playToken++;
+  synth.cancel();
+  if (timer) clearTimeout(timer);
+  timer = null;
+}
+
+function startPlaybackFromCurrent() {
+  stopped = false;
+  cancelCurrentPlayback();
+  playCurrent(playToken);
+}
+
+function jumpQuestion(delta) {
+  if (queue.length === 0) {
+    buildQueue();
+  }
+  if (queue.length === 0) {
+    setProgress();
+    return;
+  }
+
+  cancelCurrentPlayback();
+  const nextIdx = nextPlayableIndex(idx + delta, delta);
+  if (nextIdx === -1) {
+    progressEl.textContent = skipLearnedEl.checked ? "移動できる未チェックの問題がありません。" : "移動できる問題がありません。";
+    return;
+  }
+  idx = nextIdx;
+
+  stopped = false;
+  currentPhase = "question";
+  setProgress(delta < 0 ? "前の問題へ移動" : "次の問題へ移動");
+  playCurrent(playToken);
+}
+
+subjectEl.addEventListener("change", () => {
+  updateLearnedInfo();
+  updateQuestionList();
+});
+
+skipLearnedEl.addEventListener("change", () => {
+  updateLearnedInfo();
+  updateQuestionListSummary();
+});
+
+learnedCurrentEl.addEventListener("change", () => {
+  if (queue.length === 0 || !queue[idx]) return;
+  const item = queue[idx];
+  if (learnedCurrentEl.checked) {
+    learnedIds.add(itemId(item));
+  } else {
+    learnedIds.delete(itemId(item));
+  }
+  saveLearnedIds();
+  setProgress(learnedCurrentEl.checked ? "覚えたチェック済み" : "覚えたチェック解除");
+  syncQuestionListState();
+});
+
+document.getElementById("clearLearned").addEventListener("click", () => {
+  learnedIds.clear();
+  saveLearnedIds();
+  if (queue.length > 0) setProgress("覚えたチェックを全部解除");
+  else updateLearnedInfo();
+  syncQuestionListState();
+});
+
+if (listSubjectEl) {
+  listSubjectEl.addEventListener("change", updateQuestionList);
+}
+if (listSearchEl) {
+  listSearchEl.addEventListener("input", updateQuestionList);
+}
+updateLearnedInfo();
+updateQuestionList();
 
 document.getElementById("start").addEventListener("click", () => {
   stopped = false;
-  synth.cancel();
-  if (timer) clearTimeout(timer);
+  cancelCurrentPlayback();
   buildQueue();
-  playCurrent();
+  updateQuestionListSummary();
+  playCurrent(playToken);
 });
 
 document.getElementById("stop").addEventListener("click", () => {
   stopped = true;
-  synth.cancel();
-  if (timer) clearTimeout(timer);
+  cancelCurrentPlayback();
   progressEl.textContent = "停止しました。";
 });
 
@@ -214,6 +607,14 @@ document.getElementById("pause").addEventListener("click", () => {
 
 document.getElementById("resume").addEventListener("click", () => {
   synth.resume();
+});
+
+document.getElementById("prev").addEventListener("click", () => {
+  jumpQuestion(-1);
+});
+
+document.getElementById("next").addEventListener("click", () => {
+  jumpQuestion(1);
 });
 </script>
 </body>
