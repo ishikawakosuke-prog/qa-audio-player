@@ -74,17 +74,16 @@
     </div>
 
     <div style="margin-top:14px">
-      <button id="start">開始</button>
-      <button class="secondary" id="pause">一時停止</button>
-      <button class="secondary" id="resume">再開</button>
-      <button class="light" id="stop">停止</button>
+      <button id="play">再生</button>
+      <button class="secondary" id="stop">停止</button>
+      <button class="light" id="restart">最初から</button>
     </div>
 
     <div style="margin-top:8px">
       <button class="light" id="prev">← 前の問題</button>
       <button class="light" id="next">次の問題 →</button>
     </div>
-    <p class="muted">iPhone/Androidでは、最初に必ず「開始」をタップしてください。端末によってはマナーモード中でも音量ボタンで音量調整が必要です。</p>
+    <p class="muted">iPhone/Androidでは、最初に必ず「再生」をタップしてください。端末によってはマナーモード中でも音量ボタンで音量調整が必要です。</p>
   </section>
 
   <section class="card">
@@ -155,7 +154,9 @@
     <ol>
       <li>科目を選ぶ。</li>
       <li>答えまでの秒数と読み上げ速度を決める。</li>
-      <li>「開始」を押す。途中で「前の問題」「次の問題」も使えます。</li>
+      <li>「再生」を押すと、今表示されている問題から始まります。</li>
+      <li>「停止」を押すと、今の問題で止まります。</li>
+      <li>「最初から」を押すと、選んだ科目の最初から流れます。</li>
       <li>覚えた問題はチェックすると、次回から読み上げ対象から外れます。</li>
       <li>読み間違いは「読み間違い修正」に登録すると、音声だけ指定した読み方に変わります。</li>
       <li>読み方設定は書き出して、別のiPhoneやPCに取り込めます。</li>
@@ -205,6 +206,7 @@ let stopped = true;
 let timer = null;
 let currentPhase = "";
 let playToken = 0;
+let queueDirty = true;
 
 const RATE_BASE_MULTIPLIER = 1.08; // 画面上の1.00倍が、直前バージョンの0.90倍相当になる
 const LEARNED_STORAGE_KEY = "qaAudioPlayerLearnedV1";
@@ -705,6 +707,7 @@ function buildQueue() {
     queue = [...queue].sort(() => Math.random() - 0.5);
   }
   idx = 0;
+  queueDirty = false;
   updateLearnedInfo();
 }
 
@@ -809,17 +812,54 @@ function cancelCurrentPlayback() {
   timer = null;
 }
 
-function startPlaybackFromCurrent() {
+function playFromCurrent() {
+  if (queueDirty || queue.length === 0) {
+    buildQueue();
+  }
+  if (queue.length === 0) {
+    stopped = true;
+    setProgress();
+    return;
+  }
+  if (idx < 0 || idx >= queue.length) idx = 0;
   stopped = false;
   cancelCurrentPlayback();
+  currentPhase = "question";
+  setProgress("再生中");
+  playCurrent(playToken);
+}
+
+function pauseAtCurrentQuestion() {
+  stopped = true;
+  cancelCurrentPlayback();
+  if (queue.length > 0 && queue[idx]) {
+    setProgress("停止中");
+  } else {
+    progressEl.textContent = "停止中です。";
+  }
+}
+
+function restartFromFirst() {
+  stopped = false;
+  cancelCurrentPlayback();
+  buildQueue();
+  updateQuestionListSummary();
+  if (queue.length === 0) {
+    stopped = true;
+    setProgress();
+    return;
+  }
+  currentPhase = "question";
+  setProgress("最初から再生中");
   playCurrent(playToken);
 }
 
 function jumpQuestion(delta) {
-  if (queue.length === 0) {
+  if (queueDirty || queue.length === 0) {
     buildQueue();
   }
   if (queue.length === 0) {
+    stopped = true;
     setProgress();
     return;
   }
@@ -827,11 +867,12 @@ function jumpQuestion(delta) {
   cancelCurrentPlayback();
   const nextIdx = nextPlayableIndex(idx + delta, delta);
   if (nextIdx === -1) {
+    stopped = true;
     progressEl.textContent = skipLearnedEl.checked ? "移動できる未チェックの問題がありません。" : "移動できる問題がありません。";
     return;
   }
-  idx = nextIdx;
 
+  idx = nextIdx;
   stopped = false;
   currentPhase = "question";
   setProgress(delta < 0 ? "前の問題へ移動" : "次の問題へ移動");
@@ -839,11 +880,21 @@ function jumpQuestion(delta) {
 }
 
 subjectEl.addEventListener("change", () => {
+  queueDirty = true;
   updateLearnedInfo();
   updateQuestionList();
 });
 
+shuffleEl.addEventListener("change", () => {
+  queueDirty = true;
+});
+
+repeatEl.addEventListener("change", () => {
+  queueDirty = true;
+});
+
 skipLearnedEl.addEventListener("change", () => {
+  queueDirty = true;
   updateLearnedInfo();
   updateQuestionListSummary();
 });
@@ -911,35 +962,15 @@ updatePronunciationList();
 updateLearnedInfo();
 updateQuestionList();
 
-document.getElementById("start").addEventListener("click", () => {
-  stopped = false;
-  cancelCurrentPlayback();
-  buildQueue();
-  updateQuestionListSummary();
-  playCurrent(playToken);
-});
+document.getElementById("play").addEventListener("click", playFromCurrent);
 
-document.getElementById("stop").addEventListener("click", () => {
-  stopped = true;
-  cancelCurrentPlayback();
-  progressEl.textContent = "停止しました。";
-});
+document.getElementById("stop").addEventListener("click", pauseAtCurrentQuestion);
 
-document.getElementById("pause").addEventListener("click", () => {
-  if (synth.speaking) synth.pause();
-});
+document.getElementById("restart").addEventListener("click", restartFromFirst);
 
-document.getElementById("resume").addEventListener("click", () => {
-  synth.resume();
-});
+document.getElementById("prev").addEventListener("click", () => jumpQuestion(-1));
 
-document.getElementById("prev").addEventListener("click", () => {
-  jumpQuestion(-1);
-});
-
-document.getElementById("next").addEventListener("click", () => {
-  jumpQuestion(1);
-});
+document.getElementById("next").addEventListener("click", () => jumpQuestion(1));
 </script>
 </body>
 </html>
